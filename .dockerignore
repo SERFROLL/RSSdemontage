@@ -1,0 +1,14 @@
+node_modules
+.git
+.github
+.env*
+.dev.vars*
+.next
+dist
+.wrangler
+.sites-runtime
+outputs
+work
+coverage
+*.tsbuildinfo
+*.log

@@ -7,9 +7,21 @@ for(const name of ["domain","seed","store","session","telegram-auth","xlsx","exp
 }
 for(const name of ["state","command","history","export","backup"]){let code=ts.transpileModule(readFileSync("app/api/"+name+"/route.ts","utf8"),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from "@\/lib\/([a-z-]+)"/g,'from "./$1.mjs"');writeFileSync(dir+"/route-"+name+".mjs",code);}
 writeFileSync(dir+"/runtime.mjs","export const env=globalThis.__PID_TEST_ENV;\n");
-const db=new DatabaseSync(":memory:");
-for(const f of readdirSync("drizzle").filter(x=>x.endsWith(".sql")))db.exec(readFileSync("drizzle/"+f,"utf8"));
-const binding={prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}}}}},async batch(statements){db.exec("BEGIN");try{const out=[];for(const s of statements)out.push(await s.run());db.exec("COMMIT");return out;}catch(e){db.exec("ROLLBACK");throw e;}}};
+let db, binding, close, databaseLabel;
+if(process.env.TEST_DATABASE_URL){
+ const url=new URL(process.env.TEST_DATABASE_URL);
+ if(!["localhost","127.0.0.1"].includes(url.hostname)||url.pathname!=="/pid_cable_test")throw new Error("Tests require a local, dedicated pid_cable_test database");
+ const {createPool,createDatabase}=await import("../server/postgres.mjs");
+ const {migrate}=await import("../server/migrate.mjs");
+ db=createPool({DATABASE_URL:url.toString(),DATABASE_SSL:"false"});await migrate(db);
+ await db.query("TRUNCATE documents, notifications RESTART IDENTITY");
+ binding=createDatabase(db);close=()=>db.end();databaseLabel="PostgreSQL";
+}else{
+ db=new DatabaseSync(":memory:");
+ for(const f of readdirSync("drizzle").filter(x=>x.endsWith(".sql")))db.exec(readFileSync("drizzle/"+f,"utf8"));
+ binding={prepare(sql){return {bind(...args){return {async first(){return db.prepare(sql).get(...args)||null;},async all(){return {results:db.prepare(sql).all(...args)};},async run(){return db.prepare(sql).run(...args);}}}}},async batch(statements){db.exec("BEGIN");try{const out=[];for(const s of statements)out.push(await s.run());db.exec("COMMIT");return out;}catch(e){db.exec("ROLLBACK");throw e;}}};
+ close=()=>db.close();databaseLabel="SQLite";
+}
 globalThis.__PID_TEST_ENV={DB:binding,APP_MODE:"demo",BOT_ENABLED:"false"};
 const routes={};for(const n of ["state","command","history","export","backup"])routes[n]=await import("../"+dir+"/route-"+n+".mjs");
 const h={"oai-authenticated-user-id":"api-test-owner","x-demo-user":"demo-admin","Content-Type":"application/json"};
@@ -31,5 +43,20 @@ try{
  r=await routes.state.GET(new Request("https://example.test/api/state"));assert.equal(r.status,401);checks++;
  r=await request("/api/command",{method:"POST",headers:{origin:"https://attacker.invalid"},body:JSON.stringify(body)});assert.equal(r.status,403);checks++;
  r=await request("/api/command",{method:"POST",body:JSON.stringify({action:"adjustment",requestId:"adjust-check",data:{pid:"pid:1234",date:s.date,cableId:"cable:mksb",actualCoils:"5",actualMetres:"",reason:"Проверено вручную"}})});assert.equal(r.status,200,await r.text());checks++;
- console.log("API checks passed: "+checks+" (real route handlers + SQLite, no network).");
-}finally{db.close();}
+ if(process.env.TEST_DATABASE_URL){
+  const {migrate,bootstrapOwner}=await import("../server/migrate.mjs");
+  await migrate(db);await migrate(db);
+  r=await request("/api/state");assert.ok((await r.json()).docs.some(d=>d.id===saved.doc.id));checks++;
+  const config={ADMIN_TELEGRAM_ID:"123456789"};await bootstrapOwner(binding,config);await bootstrapOwner(binding,config);
+  assert.equal((await db.query("SELECT count(*)::integer AS n FROM documents WHERE namespace='production'")).rows[0].n,1);checks++;
+  await assert.rejects(()=>bootstrapOwner(binding,{ADMIN_TELEGRAM_ID:"987654321"}));checks++;
+  const claims=await Promise.all([1,2].map(()=>binding.prepare("INSERT OR IGNORE INTO notifications(key,status,chat_id,created_at) VALUES (?,'sending',?,?) RETURNING key").bind("same-notification","test",new Date().toISOString()).first()));
+  assert.equal(claims.filter(Boolean).length,1);checks++;
+  await assert.rejects(()=>binding.batch([
+   binding.prepare("INSERT INTO notifications(key,status,chat_id,created_at) VALUES (?,'sending',?,?)").bind("rollback-test","test","now"),
+   binding.prepare("INSERT INTO notifications(key,status,chat_id,created_at) VALUES (?,'sending',?,?)").bind("same-notification","test","now")
+  ]));
+  assert.equal(await binding.prepare("SELECT key FROM notifications WHERE key=?").bind("rollback-test").first(),null);checks++;
+ }
+ console.log("API checks passed: "+checks+" (real route handlers + "+databaseLabel+").");
+}finally{await close();}

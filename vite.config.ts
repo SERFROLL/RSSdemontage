@@ -2,6 +2,7 @@ import vinext from "vinext";
 import { defineConfig } from "vite";
 import hostingConfig from "./.openai/hosting.json";
 import { sites } from "./build/sites-vite-plugin";
+import { fileURLToPath } from "node:url";
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   "00000000-0000-4000-8000-000000000000";
@@ -34,6 +35,14 @@ const localBindingConfig = {
 };
 
 export default defineConfig(async () => {
+  if (process.env.DEPLOY_TARGET === "timeweb") {
+    return {
+      plugins: [vinext()],
+      resolve: {
+        alias: { "cloudflare:workers": fileURLToPath(new URL("./server/runtime.mjs", import.meta.url)) },
+      },
+    };
+  }
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";

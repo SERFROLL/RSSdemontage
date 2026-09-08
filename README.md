@@ -66,4 +66,5 @@ APP_MODE=production: авторизация подписанным Telegram init
 Подробности: docs/REQUIREMENTS.md, docs/ACCOUNTING.md, docs/PILOT.md.
 
 Подготовка переноса в GitHub и автоматических обновлений: docs/GITHUB.md.
-Файл `.github/workflows/ci.yml` запускает проверки и сборку; публикация на хостинг пока не подключена.
+Файл `.github/workflows/ci.yml` проверяет обе сборки и обновляет ветку `release` после успешного теста контейнера.
+Запуск на Timeweb Cloud (Node.js, PostgreSQL, S3): [инструкция](docs/TIMEWEB.md). Для автопубликации подключите приложение Timeweb к ветке `release`.
