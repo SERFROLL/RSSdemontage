@@ -8,11 +8,15 @@ export function exportSnapshot(docs:Doc[],from:string,to:string){
   if(trip.data.receipt)all.push({id:"receipt:"+trip.id+":"+c.id,kind:"receipt",version:trip.data.receiptVersion||1,tripId:trip.id,date:trip.data.receipt.date,pid:trip.pid!,cableId:c.cableId,cableName:name(c.cableId),author:name(trip.data.receipt.author),grams:trip.data.receipt.weights[c.id],coilId:c.id,sequence:c.number,action:"UPSERT"});
  }
  const previous=new Map<string,ExportRow>();for(const e of docs.filter(d=>d.kind==="export").sort((a,b)=>(a.data.exportOrder||a.seq||0)-(b.data.exportOrder||b.seq||0)))for(const row of e.data.rows)previous.set(row.id,row);
+ // A correction can add rows to an already exported operation. These rows have
+ // no previous ID, but must travel with the corrected operation outside its date range.
+ const exportedOperations=new Set([...previous.values()].map(r=>r.kind+":"+r.tripId));
+ const addedToExportedOperation=(r:ExportRow)=>!previous.has(r.id)&&exportedOperations.has(r.kind+":"+r.tripId);
  const changed=(r:ExportRow,p:ExportRow)=>r.version!==p.version||r.grams!==p.grams||r.cableId!==p.cableId||r.date!==p.date||r.pid!==p.pid||p.action==="DELETE";
- const rows=all.filter(r=>(r.date>=from&&r.date<=to)||(previous.has(r.id)&&changed(r,previous.get(r.id)!)));
+ const rows=all.filter(r=>(r.date>=from&&r.date<=to)||addedToExportedOperation(r)||(previous.has(r.id)&&changed(r,previous.get(r.id)!)));
  const current=new Set(all.map(r=>r.id));
  for(const p of previous.values())if(p.action!=="DELETE"&&!current.has(p.id))rows.push({...p,version:p.version+1,action:"DELETE"});
- const changes=rows.filter(r=>previous.has(r.id)&&(r.action==="DELETE"||changed(r,previous.get(r.id)!))).map(r=>({id:r.id,kind:r.kind,before:previous.get(r.id),after:r}));
+ const changes=rows.filter(r=>addedToExportedOperation(r)||(previous.has(r.id)&&(r.action==="DELETE"||changed(r,previous.get(r.id)!)))).map(r=>({id:r.id,kind:r.kind,before:previous.get(r.id),after:r}));
  return {rows,changes,from,to,exportOrder:Math.max(0,...docs.map(d=>d.seq||0))+1,formatVersion:"1.0",importedAt:null};
 }
 export function exportWorkbook(data:ReturnType<typeof exportSnapshot>,id:string){
