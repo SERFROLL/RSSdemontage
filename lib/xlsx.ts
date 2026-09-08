@@ -1,0 +1,21 @@
+// Minimal OOXML workbook, UTF-8 text cells and numeric cells; no macros or formulas.
+const enc=new TextEncoder();
+function xml(v:any){return String(v??"").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function col(n:number){let s="";for(n++;n;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s;}
+function crc32(b:Uint8Array){let c=0xffffffff;for(const n of b){c^=n;for(let k=0;k<8;k++)c=(c>>>1)^((c&1)?0xedb88320:0);}return (c^0xffffffff)>>>0;}
+function bytes(n:number){return new Uint8Array(n);}
+function zip(files:Record<string,string>){const parts:Uint8Array[]=[],central:Uint8Array[]=[];let offset=0;
+ for(const [name,content] of Object.entries(files)){const n=enc.encode(name),b=enc.encode(content),crc=crc32(b),h=bytes(30+n.length),v=new DataView(h.buffer);v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint16(6,0x800,true);v.setUint32(14,crc,true);v.setUint32(18,b.length,true);v.setUint32(22,b.length,true);v.setUint16(26,n.length,true);h.set(n,30);parts.push(h,b);
+ const c=bytes(46+n.length),w=new DataView(c.buffer);w.setUint32(0,0x02014b50,true);w.setUint16(4,20,true);w.setUint16(6,20,true);w.setUint16(8,0x800,true);w.setUint32(16,crc,true);w.setUint32(20,b.length,true);w.setUint32(24,b.length,true);w.setUint16(28,n.length,true);w.setUint32(42,offset,true);c.set(n,46);central.push(c);offset+=h.length+b.length;
+ }const size=central.reduce((n,c)=>n+c.length,0),end=bytes(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,central.length,true);v.setUint16(10,central.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);const all=[...parts,...central,end],out=bytes(all.reduce((s,a)=>s+a.length,0));let p=0;for(const a of all){out.set(a,p);p+=a.length;}return out;
+}
+export function workbook(sheets:{name:string;rows:any[][]}[]){
+ const ns="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+ const files:Record<string,string>={};
+ files["[Content_Types].xml"]='<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+sheets.map((_,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join("")+"</Types>";
+ files["_rels/.rels"]='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+ files["xl/workbook.xml"]='<workbook xmlns="'+ns+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+sheets.map((s,i)=>'<sheet name="'+xml(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join("")+'</sheets></workbook>';
+ files["xl/_rels/workbook.xml.rels"]='<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map((_,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join("")+'</Relationships>';
+ sheets.forEach((s,i)=>{files["xl/worksheets/sheet"+(i+1)+".xml"]='<worksheet xmlns="'+ns+'"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="'+Math.max(1,...s.rows.map(r=>r.length))+'" width="23" customWidth="1"/></cols><sheetData>'+s.rows.map((row,r)=>'<row r="'+(r+1)+'">'+row.map((val,c)=>val==null?'<c r="'+col(c)+(r+1)+'"/>':typeof val==="number"&&Number.isFinite(val)?'<c r="'+col(c)+(r+1)+'"><v>'+val+'</v></c>':'<c r="'+col(c)+(r+1)+'" t="inlineStr"><is><t xml:space="preserve">'+xml(val)+'</t></is></c>').join("")+'</row>').join("")+'</sheetData><autoFilter ref="A1:'+col(Math.max(1,...s.rows.map(r=>r.length))-1)+Math.max(1,s.rows.length)+'"/></worksheet>';});
+ return zip(files);
+}
