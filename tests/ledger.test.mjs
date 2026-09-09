@@ -5,7 +5,7 @@ import {exportSnapshot,exportWorkbook} from "../outputs/test-runtime/export.mjs"
 import {validateTelegram} from "../outputs/test-runtime/telegram-auth.mjs";
 const seed=()=>demoDocs().map((d,i)=>({...d,seq:i+1}));
 const actors={foreman:{id:"demo-foreman",name:"Прораб",roles:["foreman"]},winder:{id:"demo-winder",roles:["winder"]},shipper:{id:"demo-shipper",roles:["shipper"]},warehouse:{id:"demo-warehouse",roles:["warehouse"]},admin:{id:"demo-admin",roles:["admin"]},observer:{id:"demo-observer",roles:["observer"]}};
-const cmd=(action,data,old)=>({action,data,requestId:crypto.randomUUID(),id:old?.id,expectedVersion:old?.version});
+const cmd=(action,data,old)=>({action,data:{...data,...(old?{reason:data.reason||"Исправление по первичным данным"}:{})},requestId:crypto.randomUUID(),id:old?.id,expectedVersion:old?.version});
 const replace=(docs,d)=>[...docs.filter(x=>x.id!==d.id),{...d,seq:Math.max(0,...docs.map(x=>x.seq||0))+1}];
 const report=(status="work")=>({pid:"pid:1234",date:today(),category:"excavation",status,cableId:"cable:mksb",trench:"210",cable:"420"});
 test("Russian decimal masses parse without losing grams",()=>{assert.equal(decimal("123,456"),123456);assert.deepEqual(weightList("123 234\n345;456,5"),[123000,234000,345000,456500]);});
@@ -26,64 +26,58 @@ test("Negative balances persist without manufactured restoration",()=>{const doc
 test("Correction is based on checked actual, not necessarily zero",()=>{const docs=seed(),r=prepareCommand(docs,actors.admin,cmd("adjustment",{pid:"pid:1234",date:today(),cableId:"cable:mksb",actualMetres:"100",actualCoils:"5",reason:"Пересчёт и измерение"}));const b=balances(replace(docs,r)).find(x=>x.pid==="pid:1234"&&x.cableId==="cable:mksb");assert.equal(b.mm,100000);assert.equal(b.coils,5);assert.equal(summary(replace(docs,r)).cableMm,0);});
 test("A late report flags existing correction; adjustment is not silently changed",()=>{let docs=seed(),a=prepareCommand(docs,actors.admin,cmd("adjustment",{pid:"pid:1234",date:today(),cableId:"cable:mksb",actualCoils:"0",actualMetres:"",reason:"Проверка катушек"}));docs=replace(docs,a);const before=docs.find(d=>d.id===a.id).data.deltaCoils;docs=replace(docs,prepareCommand(docs,actors.winder,cmd("report",{pid:"pid:1234",date:today(),category:"winding",status:"work",lines:[{cableId:"cable:mksb",count:"3"}]})));assert.ok(adjustmentReviews(docs).some(x=>x.id===a.id));assert.equal(docs.find(d=>d.id===a.id).data.deltaCoils,before);});
 test("Opening accumulated production does not increase inventory twice",()=>{const docs=seed(),b=balances(docs,docs.find(d=>d.kind==="pid").data.cutoff).find(x=>x.pid==="pid:1234"&&x.cableId==="cable:mksb");assert.equal(b.mm,2840000);assert.equal(b.extractedMm,4800000);});
-const windingInput=()=>({pid:"pid:1234",date:today(),category:"winding",status:"work",lines:[{cableId:"cable:mksb",count:"3",measurement:{metres:"",kg:"",weighedOn:today()}}]});
-const openingInput=()=>({pid:"pid:1234",cableId:"cable:mksb",metres:"2840",coils:"6",accumulatedExtracted:"4800",accumulatedWound:"12",accumulatedWoundMetres:"4000",woundMeasurement:{metres:"1800",kg:"",weighedOn:today()}});
-test("Winding count can arrive before length and weight, with unknown length distinct from zero",()=>{
- let docs=seed();const input=windingInput(),r=prepareCommand(docs,actors.winder,cmd("report",input));docs=replace(docs,r);
- assert.equal(r.data.lines[0].measurement.directMm,null);assert.equal(r.data.lines[0].measurement.grams,null);
- assert.deepEqual(windingTotals(docs,today(),input.pid,true),{knownMm:0,unknownCoils:3,coils:3});
- input.lines[0].measurement.metres="600";
- const before=balances(docs),edited=prepareCommand(docs,actors.winder,cmd("report",input,r));docs=replace(docs,edited);
- assert.deepEqual(balances(docs),before);assert.equal(edited.version,2);
- assert.deepEqual(windingTotals(docs,today(),input.pid,true),{knownMm:600000,unknownCoils:0,coils:3});
+const windingInput=()=>({pid:"pid:1234",date:today(),category:"winding",status:"work",lines:[{cableId:"cable:mksb",count:"3"}]});
+const cablePositions=docs=>balances(docs).map(({pid,cableId,mm,warehouseGrams,sentGrams,receivedGrams,transitGrams,differenceGrams})=>({pid,cableId,mm,warehouseGrams,sentGrams,receivedGrams,transitGrams,differenceGrams}));
+
+test("Winding and its correction change only auxiliary counts, never cable length or mass",()=>{
+ let docs=seed();const before=cablePositions(docs),input=windingInput(),first=prepareCommand(docs,actors.winder,cmd("report",input));docs=replace(docs,first);
+ assert.equal(first.data.lines[0].measurement,undefined);assert.deepEqual(cablePositions(docs),before);assert.equal(windingTotals(docs,today(),input.pid,true).coils,3);
+ const edit=prepareCommand(docs,actors.winder,cmd("report",{...input,lines:[{cableId:"cable:mksb",count:"5"}]},first));docs=replace(docs,edit);
+ assert.deepEqual(cablePositions(docs),before);assert.equal(windingTotals(docs,today(),input.pid,true).coils,5);
 });
-test("Later weight preserves primary measured metres and records a separate calculated length",()=>{
- let docs=seed(),input=windingInput();input.lines[0].measurement.metres="600";
- const first=prepareCommand(docs,actors.winder,cmd("report",input));docs=replace(docs,first);const before=balances(docs);
- input.lines[0].measurement.kg="1300";
- const later=prepareCommand(docs,actors.winder,cmd("report",input,first));docs=replace(docs,later);const m=later.data.lines[0].measurement;
- assert.equal(m.directMm,600000);assert.equal(m.calculatedMm,650000);assert.equal(m.grams,1300000);assert.equal(woundLength(m),600000);
- assert.equal(windingTotals(docs,today(),input.pid,true).knownMm,600000);assert.deepEqual(balances(docs),before);
+
+test("New winding report cannot manufacture cable measurements",()=>{
+ for(const measurement of [{metres:"600",kg:"",weighedOn:today()},{metres:"",kg:"1200",weighedOn:today()}]){
+  const input=windingInput();input.lines[0].measurement=measurement;
+  assert.throws(()=>prepareCommand(seed(),actors.winder,cmd("report",input)));
+ }
 });
-test("Weight supplies a provisional length when no direct measurement exists, without requiring a fictitious zero",()=>{
- const input=windingInput();input.lines[0].measurement.kg="1200";
- const r=prepareCommand(seed(),actors.winder,cmd("report",input));assert.equal(r.data.lines[0].measurement.directMm,null);assert.equal(woundLength(r.data.lines[0].measurement),600000);
+
+test("Legacy winding measurements survive an unchanged correction and remain read-only",()=>{
+ let docs=seed();const old=docs.find(d=>d.kind==="report"&&d.data.category==="winding");
+ const measurement={directMm:600000,grams:1300000,weighedOn:old.date,calculatedMm:650000,coefficient:{id:"legacy-sample",version:1,sampleMm:10000,sampleGrams:20000}};
+ old.data.lines[0].measurement=measurement;
+ const corrected=prepareCommand(docs,actors.winder,cmd("report",{pid:old.pid,date:old.date,category:"winding",status:"work",lines:[{cableId:"cable:mksb",count:String(old.data.lines[0].count)}]},old));
+ assert.deepEqual(corrected.data.lines[0].measurement,measurement);
+ assert.throws(()=>prepareCommand(docs,actors.winder,cmd("report",{pid:old.pid,date:old.date,category:"winding",status:"work",lines:[{cableId:"cable:mksb",count:"99"}]},old)));
 });
-test("Opening distinguishes on-PID wound subset from historical work and allows later weighing",()=>{
- let docs=seed();const old=docs.find(d=>d.id==="opening:pid:1234:cable:mksb"),before=balances(docs),input=openingInput();
- const initial=prepareCommand(docs,actors.admin,cmd("opening",input,old));docs=replace(docs,initial);
- input.woundMeasurement.kg="4000";
- const measured=prepareCommand(docs,actors.admin,cmd("opening",input,initial));docs=replace(docs,measured);
- assert.equal(measured.date,old.date);assert.equal(measured.data.woundMeasurement.weighedOn,today());
- assert.equal(measured.data.woundMeasurement.directMm,1800000);assert.equal(measured.data.woundMeasurement.calculatedMm,2000000);
- assert.equal(measured.data.accumulatedWoundMm,4000000);assert.deepEqual(balances(docs),before);
-});
-test("New calibration does not replace a stored weighing sample when the record is reopened",()=>{
- let docs=seed();const old=docs.find(d=>d.id==="opening:pid:1234:cable:mksb"),input=openingInput();input.woundMeasurement.kg="4000";
- const measured=prepareCommand(docs,actors.admin,cmd("opening",input,old));docs=replace(docs,measured);
- docs=replace(docs,prepareCommand(docs,actors.admin,cmd("coefficient",{pid:input.pid,cableId:input.cableId,date:today(),sampleMetres:"10",sampleKg:"40"})));
- const reopened=prepareCommand(docs,actors.admin,cmd("opening",input,measured));assert.deepEqual(reopened.data.woundMeasurement,measured.data.woundMeasurement);
-});
-test("Opening guards impossible wound subset, fictitious zero length, and reassignment to another PID",()=>{
- const docs=seed(),old=docs.find(d=>d.id==="opening:pid:1234:cable:mksb"),input=openingInput();
- assert.throws(()=>prepareCommand(docs,actors.admin,cmd("opening",{...input,woundMeasurement:{metres:"3000"}},old)),/превышать/);
- assert.throws(()=>prepareCommand(docs,actors.admin,cmd("opening",{...input,woundMeasurement:{metres:"0"}},old)),/пустым/);
- assert.throws(()=>prepareCommand(docs,actors.admin,cmd("opening",{...input,coils:"0",woundMeasurement:{kg:"100",weighedOn:today()}},old)),/катушки/);
- assert.throws(()=>prepareCommand(docs,actors.admin,cmd("opening",{...input,pid:"pid:2048"},old)),/закреплены/);
-});
-test("A winding report cannot be weighed before winding or use an unmeasured cable type",()=>{
- const docs=seed(),input=windingInput();input.lines[0].measurement={metres:"",kg:"100",weighedOn:docs.find(d=>d.kind==="pid").date};
- assert.throws(()=>prepareCommand(docs,actors.winder,cmd("report",input)),/раньше даты намотки/);
- input.lines[0].measurement.weighedOn=today();assert.throws(()=>prepareCommand(docs.filter(d=>d.kind!=="coefficient"),actors.winder,cmd("report",input)),/контрольное взвешивание/);
-});
-test("Legacy records retain inventory without inventing length; legacy clients cannot erase new measurements",()=>{
- let docs=seed();const old=docs.find(d=>d.id==="opening:pid:1234:cable:mksb"),input=openingInput();
+
+test("Legacy opening values are retained but cannot be edited as a fresh initial balance",()=>{
+ const docs=seed(),old=docs.find(d=>d.id==="opening:pid:1234:cable:mksb");
  assert.equal(woundLength(old.data.woundMeasurement),null);
- const enriched=prepareCommand(docs,actors.admin,cmd("opening",input,old));docs=replace(docs,enriched);
- delete input.woundMeasurement;delete input.accumulatedWoundMetres;
- const saved=prepareCommand(docs,actors.admin,cmd("opening",input,enriched));assert.deepEqual(saved.data.woundMeasurement,enriched.data.woundMeasurement);assert.equal(saved.data.accumulatedWoundMm,4000000);
- assert.throws(()=>prepareCommand(docs,actors.admin,cmd("opening",{...input,coils:"7"},enriched)),/Обновите приложение/);
+ assert.throws(()=>prepareCommand(docs,actors.admin,cmd("opening",{pid:old.pid,cableId:old.data.cableId,metres:"2840",coils:"6"},old)));
 });
+
+test("Ten independently weighed coils produce 9540 kg and 4770 calculated metres",()=>{
+ const docs=seed(),before=balances(docs).find(x=>x.pid==="pid:1234"&&x.cableId==="cable:mksb");
+ const trip=prepareCommand(docs,actors.shipper,cmd("trip",{pid:"pid:1234",date:today(),groups:[{cableId:"cable:mksb",masses:"801,803,806,900,950,980,1000,1100,1200,1000".split(",").join("\n")}]}));
+ assert.equal(trip.data.coils.length,10);assert.equal(trip.data.coils.reduce((n,c)=>n+c.grams,0),9540000);assert.equal(trip.data.coils.reduce((n,c)=>n+c.sentMm,0),4770000);
+ const after=balances(replace(docs,trip)).find(x=>x.pid===before.pid&&x.cableId===before.cableId);
+ assert.equal(before.mm-after.mm,4770000);assert.equal(after.transitGrams-before.transitGrams,9540000);assert.equal(before.coils-after.coils,10);
+});
+
+test("Warehouse correction changes kg only and does not manufacture field metres or production",()=>{
+ const docs=seed(),before=balances(docs).find(x=>x.pid==="pid:1234"&&x.cableId==="cable:mksb");
+ const correction=prepareCommand(docs,actors.admin,cmd("adjustment",{pid:"pid:1234",date:today(),cableId:"cable:mksb",location:"warehouse",actualKg:"2480.375",reason:"Сверка складского остатка по весам"}));
+ const after=balances(replace(docs,correction)).find(x=>x.pid===before.pid&&x.cableId===before.cableId);
+ assert.equal(after.warehouseGrams,2480375);assert.equal(after.mm,before.mm);assert.equal(after.coils,before.coils);assert.equal(after.extractedMm,before.extractedMm);
+});
+
+test("Correcting a posted report requires a reason",()=>{
+ const docs=seed(),old=docs.find(d=>d.kind==="report"&&d.data.category==="excavation");
+ assert.throws(()=>prepareCommand(docs,actors.foreman,{...cmd("report",{...report(),date:old.date},old),data:{...report(),date:old.date}}));
+});
+
 test("Each foreman/PID has a separate report obligation",()=>{assert.equal(expectedReports(seed(),today()).length,4);});
 test("Old exported changes included outside next chosen period",()=>{let docs=seed();const t=docs.find(d=>d.kind==="trip"),first=exportSnapshot(docs,t.date,t.date);docs.push({id:"export1",kind:"export",version:1,date:today(),seq:100,data:first});const changed=prepareCommand(docs,actors.shipper,cmd("trip",{pid:t.pid,date:t.date,groups:[{cableId:"cable:mksb",masses:"124 234 345 456"}]},t));docs=replace(docs,changed);const next=exportSnapshot(docs,today(),today());assert.equal(next.rows.length,4);assert.equal(next.changes.length,4);assert.equal(next.rows[0].id,first.rows[0].id);});
 test("Deleted previously exported coil has a tombstone",()=>{let docs=seed();const t=docs.find(d=>d.kind==="trip");const first=exportSnapshot(docs,t.date,t.date);docs.push({id:"export1",kind:"export",version:1,seq:100,data:first});docs=replace(docs,prepareCommand(docs,actors.shipper,cmd("trip",{pid:t.pid,date:t.date,groups:[{cableId:"cable:mksb",masses:"123 234 345"}]},t)));assert.equal(exportSnapshot(docs,today(),today()).rows.filter(r=>r.action==="DELETE").length,1);});

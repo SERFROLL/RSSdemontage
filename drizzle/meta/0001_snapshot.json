@@ -1,0 +1,991 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "440438ba-27b5-4233-b423-547c5961c5eb",
+  "prevId": "27e9e83c-19f6-483c-b0bd-147cda486a60",
+  "tables": {
+    "accounting_documents": {
+      "name": "accounting_documents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_version": {
+          "name": "source_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_seq": {
+          "name": "source_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_date": {
+          "name": "operation_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reverses_version": {
+          "name": "reverses_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "accounting_documents_source": {
+          "name": "accounting_documents_source",
+          "columns": [
+            "namespace",
+            "document_id",
+            "source_version"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "accounting_documents_source_seq_documents_seq_fk": {
+          "name": "accounting_documents_source_seq_documents_seq_fk",
+          "tableFrom": "accounting_documents",
+          "tableTo": "documents",
+          "columnsFrom": [
+            "source_seq"
+          ],
+          "columnsTo": [
+            "seq"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "accounting_write_checks": {
+      "name": "accounting_write_checks",
+      "columns": {
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valid": {
+          "name": "valid",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "accounting_write_valid": {
+          "name": "accounting_write_valid",
+          "value": "\"accounting_write_checks\".\"valid\"=1"
+        }
+      }
+    },
+    "coil_entries": {
+      "name": "coil_entries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delta_count": {
+          "name": "delta_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reverses_entry_id": {
+          "name": "reverses_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "coil_entries_line_id_document_lines_id_fk": {
+          "name": "coil_entries_line_id_document_lines_id_fk",
+          "tableFrom": "coil_entries",
+          "tableTo": "document_lines",
+          "columnsFrom": [
+            "line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "coil_entries_reverses_entry_id_coil_entries_id_fk": {
+          "name": "coil_entries_reverses_entry_id_coil_entries_id_fk",
+          "tableFrom": "coil_entries",
+          "tableTo": "coil_entries",
+          "columnsFrom": [
+            "reverses_entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "document_lines": {
+      "name": "document_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accounting_document_id": {
+          "name": "accounting_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "origin_pid": {
+          "name": "origin_pid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cable_id": {
+          "name": "cable_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operation_date": {
+          "name": "operation_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_role": {
+          "name": "line_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_line_id": {
+          "name": "source_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "document_lines_origin": {
+          "name": "document_lines_origin",
+          "columns": [
+            "origin_pid",
+            "cable_id",
+            "operation_date"
+          ],
+          "isUnique": false
+        },
+        "document_lines_document": {
+          "name": "document_lines_document",
+          "columns": [
+            "accounting_document_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "document_lines_accounting_document_id_accounting_documents_id_fk": {
+          "name": "document_lines_accounting_document_id_accounting_documents_id_fk",
+          "tableFrom": "document_lines",
+          "tableTo": "accounting_documents",
+          "columnsFrom": [
+            "accounting_document_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "document_lines_source_line_id_document_lines_id_fk": {
+          "name": "document_lines_source_line_id_document_lines_id_fk",
+          "tableFrom": "document_lines",
+          "tableTo": "document_lines",
+          "columnsFrom": [
+            "source_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "documents": {
+      "name": "documents",
+      "columns": {
+        "seq": {
+          "name": "seq",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pid": {
+          "name": "pid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "date": {
+          "name": "date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "author": {
+          "name": "author",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "editor": {
+          "name": "editor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "request_key": {
+          "name": "request_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "request_hash": {
+          "name": "request_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "documents_version": {
+          "name": "documents_version",
+          "columns": [
+            "namespace",
+            "document_id",
+            "version"
+          ],
+          "isUnique": true
+        },
+        "documents_request": {
+          "name": "documents_request",
+          "columns": [
+            "namespace",
+            "request_key"
+          ],
+          "isUnique": true
+        },
+        "documents_kind": {
+          "name": "documents_kind",
+          "columns": [
+            "namespace",
+            "kind"
+          ],
+          "isUnique": false
+        },
+        "documents_pid_date": {
+          "name": "documents_pid_date",
+          "columns": [
+            "namespace",
+            "pid",
+            "date"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ledger_entries": {
+      "name": "ledger_entries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "account_id": {
+          "name": "account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value_id": {
+          "name": "value_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sign": {
+          "name": "sign",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reverses_entry_id": {
+          "name": "reverses_entry_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ledger_entries_line": {
+          "name": "ledger_entries_line",
+          "columns": [
+            "line_id"
+          ],
+          "isUnique": false
+        },
+        "ledger_entries_account": {
+          "name": "ledger_entries_account",
+          "columns": [
+            "account_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ledger_entries_line_id_document_lines_id_fk": {
+          "name": "ledger_entries_line_id_document_lines_id_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "document_lines",
+          "columnsFrom": [
+            "line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ledger_entries_reverses_entry_id_ledger_entries_id_fk": {
+          "name": "ledger_entries_reverses_entry_id_ledger_entries_id_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "ledger_entries",
+          "columnsFrom": [
+            "reverses_entry_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ledger_entries_account_id_unit_stock_accounts_id_unit_fk": {
+          "name": "ledger_entries_account_id_unit_stock_accounts_id_unit_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "stock_accounts",
+          "columnsFrom": [
+            "account_id",
+            "unit"
+          ],
+          "columnsTo": [
+            "id",
+            "unit"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ledger_entries_value_id_unit_quantity_values_id_unit_fk": {
+          "name": "ledger_entries_value_id_unit_quantity_values_id_unit_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "quantity_values",
+          "columnsFrom": [
+            "value_id",
+            "unit"
+          ],
+          "columnsTo": [
+            "id",
+            "unit"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ledger_entries_value_id_line_id_quantity_values_id_line_id_fk": {
+          "name": "ledger_entries_value_id_line_id_quantity_values_id_line_id_fk",
+          "tableFrom": "ledger_entries",
+          "tableTo": "quantity_values",
+          "columnsFrom": [
+            "value_id",
+            "line_id"
+          ],
+          "columnsTo": [
+            "id",
+            "line_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ledger_entries_sign": {
+          "name": "ledger_entries_sign",
+          "value": "\"ledger_entries\".\"sign\" in (-1,1)"
+        }
+      }
+    },
+    "notifications": {
+      "name": "notifications",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "error": {
+          "name": "error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "opening_batches": {
+      "name": "opening_batches",
+      "columns": {
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pid": {
+          "name": "pid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accounting_document_id": {
+          "name": "accounting_document_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pid_stock_checked": {
+          "name": "pid_stock_checked",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "main_stock_checked": {
+          "name": "main_stock_checked",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confirmed_at": {
+          "name": "confirmed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "confirmed_by": {
+          "name": "confirmed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "opening_batches_accounting_document_id_accounting_documents_id_fk": {
+          "name": "opening_batches_accounting_document_id_accounting_documents_id_fk",
+          "tableFrom": "opening_batches",
+          "tableTo": "accounting_documents",
+          "columnsFrom": [
+            "accounting_document_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "opening_batches_namespace_pid_pk": {
+          "columns": [
+            "namespace",
+            "pid"
+          ],
+          "name": "opening_batches_namespace_pid_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "opening_batches_pid_checked": {
+          "name": "opening_batches_pid_checked",
+          "value": "\"opening_batches\".\"pid_stock_checked\"=1"
+        },
+        "opening_batches_main_checked": {
+          "name": "opening_batches_main_checked",
+          "value": "\"opening_batches\".\"main_stock_checked\"=1"
+        }
+      }
+    },
+    "quantity_inputs": {
+      "name": "quantity_inputs",
+      "columns": {
+        "result_value_id": {
+          "name": "result_value_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "input_value_id": {
+          "name": "input_value_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "input_role": {
+          "name": "input_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "quantity_inputs_result_value_id_quantity_values_id_fk": {
+          "name": "quantity_inputs_result_value_id_quantity_values_id_fk",
+          "tableFrom": "quantity_inputs",
+          "tableTo": "quantity_values",
+          "columnsFrom": [
+            "result_value_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "quantity_inputs_input_value_id_quantity_values_id_fk": {
+          "name": "quantity_inputs_input_value_id_quantity_values_id_fk",
+          "tableFrom": "quantity_inputs",
+          "tableTo": "quantity_values",
+          "columnsFrom": [
+            "input_value_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "quantity_inputs_result_value_id_input_role_pk": {
+          "columns": [
+            "result_value_id",
+            "input_role"
+          ],
+          "name": "quantity_inputs_result_value_id_input_role_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "quantity_values": {
+      "name": "quantity_values",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value_kind": {
+          "name": "value_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value_base": {
+          "name": "value_base",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "formula_code": {
+          "name": "formula_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "formula_version": {
+          "name": "formula_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_reference": {
+          "name": "source_reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "quantity_values_role": {
+          "name": "quantity_values_role",
+          "columns": [
+            "line_id",
+            "role"
+          ],
+          "isUnique": true
+        },
+        "quantity_values_id_unit": {
+          "name": "quantity_values_id_unit",
+          "columns": [
+            "id",
+            "unit"
+          ],
+          "isUnique": true
+        },
+        "quantity_values_id_line": {
+          "name": "quantity_values_id_line",
+          "columns": [
+            "id",
+            "line_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "quantity_values_line_id_document_lines_id_fk": {
+          "name": "quantity_values_line_id_document_lines_id_fk",
+          "tableFrom": "quantity_values",
+          "tableTo": "document_lines",
+          "columnsFrom": [
+            "line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "quantity_values_unit": {
+          "name": "quantity_values_unit",
+          "value": "\"quantity_values\".\"unit\" in ('mm','g')"
+        },
+        "quantity_values_exact": {
+          "name": "quantity_values_exact",
+          "value": "\"quantity_values\".\"value_base\" between 0 and 9007199254740991"
+        }
+      }
+    },
+    "stock_accounts": {
+      "name": "stock_accounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "namespace": {
+          "name": "namespace",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unit": {
+          "name": "unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_pid": {
+          "name": "owner_pid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "stock_accounts_id_unit": {
+          "name": "stock_accounts_id_unit",
+          "columns": [
+            "id",
+            "unit"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "stock_accounts_unit": {
+          "name": "stock_accounts_unit",
+          "value": "\"stock_accounts\".\"unit\" in ('mm','g')"
+        },
+        "stock_accounts_owner": {
+          "name": "stock_accounts_owner",
+          "value": "(\"stock_accounts\".\"kind\"='pid' and \"stock_accounts\".\"owner_pid\" is not null and \"stock_accounts\".\"unit\"='mm') or (\"stock_accounts\".\"kind\"<>'pid' and \"stock_accounts\".\"owner_pid\" is null)"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
