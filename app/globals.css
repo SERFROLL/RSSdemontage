@@ -11,12 +11,21 @@
 @media(prefers-color-scheme:dark){.notice{background:#1b4844;color:#c4eee8}.notice.error{background:#542d33;color:#ffd8de}.badge.done{background:#204b43;color:#a8e7da}.badge.pending{background:#493e28;color:#efd197}.tabs-bar button[data-state=active]{background:#2b5663!important}.brand>svg{background:#294551}}
 
 /* Phone workspace: persistent navigation and forms with a separate scroll area. */
+.field-grid,.split{grid-template-columns:repeat(2,minmax(0,1fr))}
+.field,.panel,.group-box,.metric{min-width:0}
+.field input,.field textarea,.field [data-slot=select-trigger]{min-width:0;max-width:100%}
+.metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.metric strong,.metric p,.list-row,.journal{overflow-wrap:anywhere}
+.field [data-slot=select-trigger]{height:auto;white-space:normal;text-align:left}
+.field [data-slot=select-value]{white-space:normal;overflow-wrap:anywhere;-webkit-line-clamp:unset}
 .workspace{padding-top:max(env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px))}
 button,input,textarea,[role=tab]{touch-action:manipulation}
 button:focus-visible{outline:3px solid var(--ring);outline-offset:3px}
 .dialog-body{display:flex!important;flex-direction:column;gap:0!important;padding:0!important;overflow:hidden;background:var(--card);max-height:calc(100dvh - 48px)}
 .dialog-body [data-slot=dialog-header]{flex:none;padding:22px 24px 18px;border-bottom:1px solid var(--border);text-align:left}
 .form-step{font-size:14px;font-weight:650;color:var(--primary);margin-bottom:6px}
+.form-scroll{overflow-anchor:none}
+.form-scroll .stack.compact>label{min-height:40px}
 .form-scroll{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:24px;scroll-padding:20px;-webkit-overflow-scrolling:touch}
 .bottom-actions{position:static;flex:none;margin:0;padding:16px 24px max(16px,env(safe-area-inset-bottom));background:var(--card)}
 .bottom-actions .action{flex:1;min-height:52px;font-size:16px}
@@ -47,13 +56,15 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:3px}
 .production-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media(max-width:700px){.production-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.opening-section .group-box{padding:14px}.opening-section .field-grid{grid-template-columns:1fr}}
 @media(max-width:700px){
+ /* Reset Tailwind's translate inputs, not the translate shorthand: CSS minification
+    can remove an identity translate and expose Dialog's default -50% shift. */
  .workspace{padding-left:16px;padding-right:16px;padding-bottom:calc(110px + env(safe-area-inset-bottom))}
  .tabs-bar{position:fixed!important;z-index:30;bottom:0;left:0;right:0;width:100%!important;margin:0!important;padding:9px 8px max(9px,env(safe-area-inset-bottom))!important;display:flex!important;flex-wrap:nowrap!important;align-items:stretch!important;gap:2px!important;background:var(--card)!important;border-top:1px solid var(--border);border-radius:0!important;box-shadow:0 -4px 24px #102d3b0a}
  .tabs-bar button{flex:1 1 0!important;min-width:0!important;height:auto!important;min-height:56px!important;padding:6px 2px!important;display:flex!important;flex-direction:column;justify-content:flex-start!important;gap:4px!important;font-size:12px!important;white-space:normal;line-height:1.2}
  .tabs-bar button>span{width:100%;min-height:2.4em;overflow-wrap:anywhere;text-align:center}
  .tabs-bar svg{display:block!important;width:21px;height:21px}
  .tabs-bar button[data-state=active]{background:var(--accent)!important;color:var(--accent-foreground)!important;box-shadow:none!important}
- .dialog-body{top:max(8px,env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px))!important;left:0!important;translate:0 0!important;transform:none!important;width:100vw!important;max-width:100vw!important;height:calc(100dvh - max(8px,env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px)))!important;max-height:calc(100dvh - max(8px,env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px)))!important;border-radius:20px 20px 0 0!important;padding:0!important}
+ .dialog-body{top:max(8px,env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px))!important;left:0!important;--tw-translate-x:0!important;--tw-translate-y:0!important;transform:none!important;width:100vw!important;max-width:100vw!important;height:calc(100dvh - max(8px,env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px)))!important;max-height:calc(100dvh - max(8px,env(safe-area-inset-top),var(--tg-content-safe-area-inset-top,0px)))!important;border-radius:20px 20px 0 0!important;padding:0!important}
  .dialog-body [data-slot=dialog-header]{padding:22px 20px 16px}
  .dialog-body [data-slot=dialog-title]{font-size:22px;line-height:1.2}
  .form-scroll{padding:20px;flex:1;gap:20px}
@@ -69,5 +80,12 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:3px}
  .date-picker{width:100%;min-height:48px}.date-picker input{width:100%;font-size:16px}
  .demo-toolbar [data-slot=select-trigger]{min-height:48px;font-size:14px}
  .receipt-card{padding:16px}.receipt-card .row{gap:10px}
+ .split{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:480px){.field-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:360px){
+ .receipt-weight{grid-template-columns:minmax(0,1fr);gap:8px}
+ .metric-grid:not(.production-grid){grid-template-columns:repeat(2,minmax(0,1fr))}
+ .metric-grid:not(.production-grid)>.metric:last-child{grid-column:1/-1}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}

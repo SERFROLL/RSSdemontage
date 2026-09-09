@@ -25,6 +25,8 @@ export default function CableApp(){
  const [s,setS]=useState<AppState|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[tab,setTab]=useState("today"),[date,setDate]=useState(()=>{if(typeof window!=="undefined"){const d=new URLSearchParams(window.location.search).get("date");if(d&&/^\d{4}-\d{2}-\d{2}$/.test(d))return d;}return today();}),[demoUser,setDemoUser]=useState("demo-admin"),[selectedPid,setSelectedPid]=useState(""),[form,setForm]=useState<Editor|null>(null),[review,setReview]=useState(false),[formError,setFormError]=useState(""),[log,setLog]=useState<any[]>([]),[exportFrom,setExportFrom]=useState(today().slice(0,8)+"01"),[exportTo,setExportTo]=useState(today()),[resume,setResume]=useState<Editor|null>(null),[recording,setRecording]=useState(false);
  const [telegramReady,setTelegramReady]=useState(false);
  const recorder=useRef<MediaRecorder|null>(null),chunks=useRef<Blob[]>([]),initialized=useRef(false);
+ const formScroll=useRef<HTMLDivElement|null>(null);
+ useEffect(()=>{if(formError)formScroll.current?.scrollTo({top:0});},[formError]);
  const headers=useCallback(()=>({"Content-Type":"application/json","x-demo-user":demoUser,"x-telegram-init-data":window.Telegram?.WebApp?.initData||""}),[demoUser]);
  const api=useCallback(async(path:string,options:RequestInit={})=>{const r=await fetch(path,{...options,headers:{...headers(),...options.headers}});const data=await r.json();if(!r.ok)throw new Error(data.error||"Не удалось выполнить действие");return data;},[headers]);
  const load=useCallback(async()=>{try{const data=await api("/api/state?date="+date);setS(data);setError("");}catch(e){setError((e as Error).message);}},[api,date]);
@@ -60,7 +62,7 @@ export default function CableApp(){
  function openReceipt(trip:Doc){edit(trip.data.receipt?"Исправление приёмки":"Приёмка рейса","receipt",{date:trip.data.receipt?.date||date,weights:Object.fromEntries(trip.data.coils.map((c:any)=>[c.id,trip.data.receipt?.weights[c.id]?String(trip.data.receipt.weights[c.id]/1000):""]))},trip);}
  async function submit(){if(!form)return;setBusy(true);setFormError("");try{const {title,...cmd}=form;await api("/api/command",{method:"POST",body:JSON.stringify(cmd)});localStorage.removeItem("pid-draft:"+actor!.id);setResume(null);setForm(null);setReview(false);toast.success("Сохранено");await load();}catch(e){setFormError((e as Error).message);}finally{setBusy(false);}}
  function verify(){
-  if(!form)return;try{prepareCommand(docs,actor!,form);const d=form.data;
+  if(!form)return;formScroll.current?.scrollTo({top:0});try{prepareCommand(docs,actor!,form);const d=form.data;
    if(form.action==="report"&&d.status==="work"){if(d.category==="excavation"){decimal(d.trench);decimal(d.cable);}else d.lines.forEach((l:any)=>decimal(l.count,0));}
    if(form.action==="trip")d.groups.forEach((g:any)=>weightList(g.masses));
    if(form.action==="receipt")Object.values(d.weights).forEach(w=>{if(decimal(w)<=0)throw new Error("Взвесьте все катушки");});
@@ -78,7 +80,7 @@ export default function CableApp(){
  {error&&<div className="notice error section-gap" role="alert">{error}<button className="action quiet" onClick={()=>load()}>Повторить</button></div>}
  {!s&&!error&&<div className="empty">Загружаем рабочий день…</div>}
  {s&&<Tabs value={tab} onValueChange={v=>{setTab(v);if(v==="history")void getHistory();}}>
- <TabsList className="tabs-bar" aria-label="Разделы приложения"><TabsTrigger value="today"><CalendarDays/><span>Сегодня</span></TabsTrigger><TabsTrigger value="pids"><Layers/><span>Все ПИД</span></TabsTrigger><TabsTrigger value="trips"><Truck/><span>Рейсы</span></TabsTrigger><TabsTrigger value="history"><History/><span>История</span></TabsTrigger>{admin&&<TabsTrigger value="admin"><Settings/><span>Управление</span></TabsTrigger>}</TabsList>
+ <TabsList className="tabs-bar" aria-label="Разделы приложения"><TabsTrigger value="today"><CalendarDays/><span>Сегодня</span></TabsTrigger><TabsTrigger value="pids"><Layers/><span>Все ПИД</span></TabsTrigger><TabsTrigger value="trips"><Truck/><span>Рейсы</span></TabsTrigger><TabsTrigger value="history"><History/><span>История</span></TabsTrigger>{admin&&<TabsTrigger value="admin" aria-label="Управление"><Settings/><span>Управ&shy;ление</span></TabsTrigger>}</TabsList>
  <TabsContent value="today">
   <section className="page-heading"><div><p className="eyebrow">{actor?.name}</p><h1>Рабочий день</h1><p className="muted">Копка, намотка и движение кабеля</p></div><label className="date-picker"><CalendarDays size={18}/><input aria-label="Дата отчётов" type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)}/></label></section>
   <div className="metric-grid"><Metric label="Трасса за день" value={fmt(s.summary.trenchMm,1000)} unit="м"/><Metric label="Извлечено" value={fmt(s.summary.cableMm,1000)} unit="м"/><WindingMetric label="Намотано за день" totals={windingTotals(docs,date,undefined,true)}/></div>
@@ -137,7 +139,7 @@ export default function CableApp(){
  </TabsContent>}
  </Tabs>}
  <Dialog open={!!form} onOpenChange={open=>{if(!open&&!busy&&!recording){setForm(null);setReview(false);}}}><DialogContent className="dialog-body" showCloseButton={false}><DialogHeader><span className="form-step">{review?"02 · Подтверждение":"01 · Ввод данных"}</span><DialogTitle>{review?"Проверьте данные":form?.title}</DialogTitle><DialogDescription>{form?.data.pid?pidName(form.data.pid)+" · ":formTrip?pidName(formTrip.pid)+" · ":""}{form?.data.date||"Данные сохранятся после подтверждения"}</DialogDescription></DialogHeader>
- {form&&<><div className="form-scroll stack">
+ {form&&<><div key={review?"review":"edit"} ref={formScroll} className="form-scroll stack">
   {formError&&<div className="notice error" role="alert">{formError}</div>}
   {review?<Review form={form} docs={docs} pidName={pidName} cableName={cableName}/>:<>
    {["trip","adjustment","coefficient","opening","assignment"].includes(form.action)&&!(form.id&&["trip","opening","assignment"].includes(form.action))&&<label className="field">ПИД<Picker value={form.data.pid} onChange={v=>change("pid",v)} options={pidOptions}/></label>}
