@@ -16,6 +16,9 @@ async function main() {
   await bootstrapOwner(runtime.DB, runtime);
   const { startProdServer } = await import("vinext/server/prod-server");
   const { server, port } = await startProdServer({ port: Number(process.env.PORT || 8080), host: "0.0.0.0" });
+  const readiness = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(20000) });
+  console.log("Startup health HTTP " + readiness.status);
+  if (!readiness.ok) throw new Error("Startup health check failed");
   let busy = false;
   async function tick() {
     if (busy) return;

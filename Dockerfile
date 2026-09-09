@@ -14,6 +14,6 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/server ./server
 USER node
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# App Platform performs HTTP readiness checks at /api/health, configured in its panel.
+# Do not override that check with a Docker HEALTHCHECK.
 CMD ["node", "server/start.mjs"]
