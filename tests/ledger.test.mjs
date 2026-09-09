@@ -73,6 +73,19 @@ test("Warehouse correction changes kg only and does not manufacture field metres
  assert.equal(after.warehouseGrams,2480375);assert.equal(after.mm,before.mm);assert.equal(after.coils,before.coils);assert.equal(after.extractedMm,before.extractedMm);
 });
 
+test("Editing an earlier warehouse correction flags the later check without rewriting its delta or flagging itself",()=>{
+ let docs=seed();const earlierDate=docs.find(d=>d.kind==="trip").date;
+ const input={pid:"pid:1234",date:earlierDate,cableId:"cable:mksb",location:"warehouse",actualKg:"100",reason:"Сверка по первой складской ведомости"};
+ const earlier=prepareCommand(docs,actors.admin,cmd("adjustment",input));docs=replace(docs,earlier);
+ const later=prepareCommand(docs,actors.admin,cmd("adjustment",{...input,date:today(),actualKg:"90",reason:"Повторная сверка остатка на складе"}));docs=replace(docs,later);
+ assert.equal(later.data.deltaGrams,-10000);assert.equal(adjustmentReviews(docs).some(d=>[earlier.id,later.id].includes(d.id)),false);
+ const edited=prepareCommand(docs,actors.admin,cmd("adjustment",{...input,actualKg:"110",reason:"Исправлена первая ведомость по акту"},earlier));docs=replace(docs,edited);
+ const reviews=adjustmentReviews(docs).map(d=>d.id);
+ assert.ok(reviews.includes(later.id));assert.equal(reviews.includes(earlier.id),false);
+ assert.equal(docs.find(d=>d.id===later.id).data.deltaGrams,-10000);
+ assert.equal(balances(docs).find(b=>b.pid===input.pid&&b.cableId===input.cableId).warehouseGrams,100000);
+});
+
 test("Correcting a posted report requires a reason",()=>{
  const docs=seed(),old=docs.find(d=>d.kind==="report"&&d.data.category==="excavation");
  assert.throws(()=>prepareCommand(docs,actors.foreman,{...cmd("report",{...report(),date:old.date},old),data:{...report(),date:old.date}}));
