@@ -119,3 +119,39 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:3px}
 .initial-review-table td{font-size:16px}
 @media(min-width:701px){.initial-dialog{width:min(94vw,780px)!important;max-width:780px!important}}
 @media(max-width:700px){.initial-context,.initial-locations{grid-template-columns:minmax(0,1fr);gap:16px}.initial-location{padding:16px}.initial-location h3{font-size:19px}.initial-date{padding:12px;background:var(--muted);border-radius:9px}.initial-review-table th{font-size:12px}.initial-review-table td{font-size:14px}.pid-numbers{max-width:100%;overflow-wrap:anywhere}}
+
+/* Setup steps and saved lists are distinct from editable form fields. */
+.setup-guide>div>p{margin-top:6px;font-size:14px}
+.setup-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;list-style:none;padding:0;margin:0}
+.setup-step{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--border);border-radius:12px;min-width:0}
+.setup-step-title{display:flex;align-items:flex-start;gap:10px}
+.setup-step-title h3{font-size:16px;line-height:1.35;overflow-wrap:anywhere}
+.setup-number{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;background:var(--muted);color:var(--primary);font-weight:700}
+.setup-number svg{width:17px;height:17px}
+.setup-step.complete .setup-number{background:var(--accent);color:var(--accent-foreground)}
+.setup-step>p{font-size:14px;overflow-wrap:anywhere}
+.setup-status{font-weight:600;color:var(--muted-foreground)}
+.setup-step .management-action{margin-top:auto}
+.management-action{display:flex;flex-direction:column;align-items:flex-start;gap:8px;min-width:0}
+.management-action .action{min-height:48px;white-space:normal;text-align:center;max-width:100%}
+.management-action .action svg{flex:none}
+.management-action .draft-note{line-height:1.45;overflow-wrap:anywhere}
+.setup-step .management-action .action{width:100%}
+.management-section{scroll-margin-top:20px}
+.management-section>.panel>.muted{font-size:14px;line-height:1.6}
+.management-empty{padding:16px 0 2px;border-top:1px solid var(--border);color:var(--muted-foreground);font-size:15px}
+.management-empty .management-action{margin-top:14px}
+.management-section .badge{align-self:flex-start;white-space:normal}
+.management-section .list-row{overflow-wrap:anywhere}
+.management-table{min-width:0;max-width:100%;overflow-x:auto}
+.management-table table{border-collapse:collapse;table-layout:fixed}
+.management-table th:first-child{width:46%}
+.management-table th,.management-table td{overflow-wrap:anywhere;vertical-align:top}
+.draft-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.draft-banner>div:first-child{flex:1;min-width:min(100%,220px);overflow-wrap:anywhere}
+.draft-banner strong{display:block;font-size:15px}
+.draft-banner .draft-note{margin-top:6px;line-height:1.5}
+.draft-actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.draft-actions .action{min-height:48px}
+@media(max-width:1050px){.setup-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.setup-steps{grid-template-columns:minmax(0,1fr);gap:12px}.setup-step{padding:16px}.management-action{width:100%}.management-action .action{width:100%}.draft-actions{width:100%;justify-content:space-between}.draft-banner{padding:16px}.draft-actions .action{flex:1}.management-section .list-row>.action{align-self:flex-start}}

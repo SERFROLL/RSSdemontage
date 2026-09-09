@@ -54,6 +54,7 @@ export async function handleUpdate(update:any){
  const m=update.message;if(!m||m.chat?.type!=="private"||!m.from?.id)return;
  if(typeof m.text!=="string"||!/^\/start(?:\s|$)/.test(m.text))return;
  const docs=await readDocs("production"),u=docs.find(d=>d.kind==="user"&&d.data.telegramId===String(m.from.id)&&d.data.active!==false);
- const body=u?"Открыть рабочее приложение":"Ваш Telegram ID: "+m.from.id+". Передайте его администратору для назначения доступа.";
- await sendOnce("update:"+update.update_id,String(m.chat.id),body,u?{inline_keyboard:[[{text:"Открыть приложение",web_app:{url:miniUrl(env)}}]]}:undefined);
+ const explanation="Учёт ведётся через кнопку «Открыть учёт». Файлы и сообщения из переписки в учёт не переносятся.";
+ const body=u?explanation:"Ваш Telegram ID: "+m.from.id+". Передайте его администратору для назначения доступа.\n\n"+explanation;
+ await sendOnce("update:"+update.update_id,String(m.chat.id),body,u?{inline_keyboard:[[{text:"Открыть учёт",web_app:{url:miniUrl(env)}}]]}:undefined);
 }

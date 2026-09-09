@@ -30,8 +30,8 @@ export function InitializationFields({docs,data,onChange}:{docs:Doc[];data:Initi
       <label className="field">Тип кабеля<Select value={line.cableId||undefined} onValueChange={cableId=>update(index,{cableId})}><SelectTrigger aria-label={`Тип кабеля, ${isPid?"ПИД":"основной склад"}, строка ${number+1}`}><SelectValue placeholder="Выберите тип"/></SelectTrigger><SelectContent>{cables.map(c=><SelectItem value={c.id} key={c.id}>{c.data.name}</SelectItem>)}</SelectContent></Select></label>
       <label className="field">{isPid?"Оценка длины остатка, м":"Масса кабеля без тары, кг"}<input inputMode="decimal" autoComplete="off" aria-label={`${isPid?"Оценка длины остатка, м":"Масса кабеля без тары, кг"}, строка ${number+1}`} value={(isPid?line.metres:line.kg)||""} onChange={e=>update(index,isPid?{metres:e.target.value}:{kg:e.target.value})}/></label>
      </div>)}
-     {!rows.length&&<p className="draft-note">Добавьте строку или отметьте, что остатков нет.</p>}
-     <button className="action secondary" type="button" onClick={()=>onChange({...data,...resetCheck(location),lines:[...lines,{location,cableId:"",...(isPid?{metres:""}:{kg:""})}]})}><Plus/>{isPid?"Добавить кабель на ПИД":"Добавить кабель на складе"}</button>
+     {!rows.length&&<p className="draft-note" id={`initial-add-${location}`}>{cables.length?"Добавьте строку или отметьте, что остатков нет.":"Типы кабеля ещё не добавлены. Добавьте их в «Управлении», затем вернитесь к остаткам. Если кабеля нет — отметьте отсутствие остатков."}</p>}
+     <button className="action secondary" type="button" disabled={!cables.length} aria-describedby={!rows.length?`initial-add-${location}`:undefined} onClick={()=>onChange({...data,...resetCheck(location),lines:[...lines,{location,cableId:"",...(isPid?{metres:""}:{kg:""})}]})}><Plus/>{isPid?"Добавить кабель на ПИД":"Добавить кабель на складе"}</button>
     </>}
     <label className="initial-check initial-verified"><Checkbox checked={!!data[checkKey]} onCheckedChange={checked=>onChange({...data,[checkKey]:!!checked})}/><span>{isPid?"Остатки на ПИД проверены":"Остатки на основном складе проверены"}</span></label>
    </section>;
