@@ -37,6 +37,15 @@ button:focus-visible{outline:3px solid var(--ring);outline-offset:3px}
 .receipt-weight strong small{font-size:14px;font-weight:400}
 .receipt-weight input{font-size:20px;min-height:52px;font-weight:600}
 .receipt-weight input::placeholder{font-size:16px;font-weight:400}
+.opening-section>div>h3{font-size:18px;line-height:1.3}
+.opening-section>div>p,.measurement-fields p{font-size:14px;line-height:1.5;margin-top:6px;overflow-wrap:anywhere}
+.opening-section+.opening-section{border-top:2px solid var(--border);padding-top:24px;margin-top:8px}
+.measurement-details{border:1px solid var(--border);border-radius:10px;background:var(--card)}
+.measurement-details summary{padding:14px 16px;min-height:48px;font-size:15px;font-weight:650;color:var(--primary);cursor:pointer;overflow-wrap:anywhere}
+.measurement-details>div{padding:0 16px 16px}
+.measurement-note{font-size:13px;line-height:1.4;color:var(--muted-foreground);margin-top:5px}
+.production-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:700px){.production-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.opening-section .group-box{padding:14px}.opening-section .field-grid{grid-template-columns:1fr}}
 @media(max-width:700px){
  .workspace{padding-left:16px;padding-right:16px;padding-bottom:calc(110px + env(safe-area-inset-bottom))}
  .tabs-bar{position:fixed!important;z-index:30;bottom:0;left:0;right:0;width:100%!important;margin:0!important;padding:9px 8px max(9px,env(safe-area-inset-bottom))!important;display:flex!important;flex-wrap:nowrap!important;align-items:stretch!important;gap:2px!important;background:var(--card)!important;border-top:1px solid var(--border);border-radius:0!important;box-shadow:0 -4px 24px #102d3b0a}

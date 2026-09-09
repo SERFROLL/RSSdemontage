@@ -1,5 +1,5 @@
 import {runtime,database,readDocs,saveDoc,hash} from "./store";
-import {type Doc,today,expectedReports,summary,balances,sum,must,DomainError} from "./domain";
+import {type Doc,today,expectedReports,summary,balances,sum,must,DomainError,windingTotals} from "./domain";
 export function dailyText(docs:Doc[],date:string){
  const q=summary(docs,date),format=(n:number,scale=1)=>new Intl.NumberFormat("ru-RU",{maximumFractionDigits:3}).format(n/scale);
  const due=expectedReports(docs,date),missing=due.filter(x=>!docs.some(d=>d.kind==="report"&&d.author===x.userId&&d.pid===x.pid&&d.date===date&&d.data.category===x.category));
@@ -7,9 +7,10 @@ export function dailyText(docs:Doc[],date:string){
  const names=(id:string)=>docs.find(d=>d.id===id)?.data.name||id;
  const dayTrips=docs.filter(d=>d.kind==="trip"&&d.date===date);
  const dayReceipts=docs.filter(d=>d.kind==="trip"&&d.data.receipt?.date===date);
+ const winding=windingTotals(docs,date,undefined,true);
  const states=docs.filter(d=>d.kind==="report"&&d.date===date&&d.data.status!=="work").map(d=>line(d.pid!)+" · "+names(d.author)+": "+(d.data.status==="idle"?"простой":"выходной"));
  const changed=docs.filter(d=>d.version>1&&today(new Date(d.createdAt))===date&&!["draft","export","user","assignment","cable"].includes(d.kind));
- const text=["Сводка · "+date,"Трасса: "+format(q.trenchMm,1000)+" м · извлечено: "+format(q.cableMm,1000)+" м","Намотано: "+q.coils+" катушек","Отправлено: "+format(sum(dayTrips.flatMap(d=>d.data.coils.map((c:any)=>c.grams))),1000000)+" т","Принято: "+format(sum(dayReceipts.flatMap(d=>Object.values(d.data.receipt.weights) as number[])),1000000)+" т"];
+ const text=["Сводка · "+date,"Трасса: "+format(q.trenchMm,1000)+" м · извлечено: "+format(q.cableMm,1000)+" м","Намотано: "+format(winding.knownMm,1000)+" м с указанной длиной · "+winding.coils+" катушек"+(winding.unknownCoils?"; у "+winding.unknownCoils+" катушек длина уточняется":""),"Отправлено: "+format(sum(dayTrips.flatMap(d=>d.data.coils.map((c:any)=>c.grams))),1000000)+" т","Принято: "+format(sum(dayReceipts.flatMap(d=>Object.values(d.data.receipt.weights) as number[])),1000000)+" т"];
  for(const p of docs.filter(d=>d.kind==="pid"&&d.data.active)){const b=balances(docs,date).filter(x=>x.pid===p.id),v=summary(docs,date,p.id);text.push(line(p.id)+": трасса "+format(v.trenchMm,1000)+" м; извлечено "+format(v.cableMm,1000)+" м; остаток расчётно "+format(sum(b.map(x=>x.mm)),1000)+" м / "+sum(b.map(x=>x.coils))+" кат.");}
  if(states.length)text.push(...states);
  text.push(missing.length?"Не сдали: "+missing.map(x=>names(x.userId)+" / "+line(x.pid)+" / "+(x.category==="excavation"?"копка":"намотка")).join("; "):"Все отчёты сданы");

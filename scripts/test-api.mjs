@@ -43,6 +43,12 @@ try{
  r=await routes.state.GET(new Request("https://example.test/api/state"));assert.equal(r.status,401);checks++;
  r=await request("/api/command",{method:"POST",headers:{origin:"https://attacker.invalid"},body:JSON.stringify(body)});assert.equal(r.status,403);checks++;
  r=await request("/api/command",{method:"POST",body:JSON.stringify({action:"adjustment",requestId:"adjust-check",data:{pid:"pid:1234",date:s.date,cableId:"cable:mksb",actualCoils:"5",actualMetres:"",reason:"Проверено вручную"}})});assert.equal(r.status,200,await r.text());checks++;
+ const opening=s.docs.find(d=>d.id==="opening:pid:1234:cable:mksb");
+ const measuredOpening={action:"opening",requestId:"opening-metres",id:opening.id,expectedVersion:opening.version,data:{pid:opening.pid,cableId:opening.data.cableId,metres:"2840",coils:"6",accumulatedExtracted:"4800",accumulatedWound:"12",accumulatedWoundMetres:"4000",woundMeasurement:{metres:"1800",kg:"",weighedOn:s.date}}};
+ r=await request("/api/command",{method:"POST",body:JSON.stringify(measuredOpening)});const withMetres=await r.json();assert.equal(r.status,200,JSON.stringify(withMetres));assert.equal(withMetres.doc.data.woundMeasurement.grams,null);checks++;
+ r=await request("/api/command",{method:"POST",body:JSON.stringify({...measuredOpening,requestId:"opening-later-weight",expectedVersion:withMetres.doc.version,data:{...measuredOpening.data,woundMeasurement:{metres:"1800",kg:"4000",weighedOn:s.date}}})});assert.equal(r.status,200,await r.text());
+ r=await request("/api/state");const reopened=(await r.json()).docs.find(d=>d.id===opening.id);assert.equal(reopened.data.mm,2840000);assert.equal(reopened.data.woundMeasurement.directMm,1800000);assert.equal(reopened.data.woundMeasurement.calculatedMm,2000000);assert.equal(reopened.data.accumulatedWoundMm,4000000);checks++;
+ r=await request("/api/history?id="+encodeURIComponent(opening.id));const openingHistory=(await r.json()).history;assert.equal(openingHistory.length,3);assert.ok(openingHistory.some(d=>d.data.woundMeasurement?.grams===null));assert.ok(openingHistory.some(d=>d.data.woundMeasurement?.grams===4000000));checks++;
  if(process.env.TEST_DATABASE_URL){
   const {migrate,bootstrapOwner}=await import("../server/migrate.mjs");
   await migrate(db);await migrate(db);

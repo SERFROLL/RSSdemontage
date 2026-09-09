@@ -24,6 +24,32 @@ export function assignments(docs:Doc[],user:string,pid?:string,date=today(),role
 export function checkPid(actor:Actor,docs:Doc[],pid:string,date:string,role:Role){allowed(actor,role);entity(docs,pid,"pid");must(isAdmin(actor)||assignments(docs,actor.id,pid,date,role).length,"Вы не закреплены за этим ПИД на указанную дату",403);}
 export function cutoff(docs:Doc[],pid:string,date:string){const p=entity(docs,pid,"pid");must(date>=p.data.cutoff,"Дата раньше начала учёта по ПИД");must(date<=today(),"Будущие операции не принимаются");}
 export function coefficient(docs:Doc[],pid:string,cable:string,asOf:string,createdAt:string){const list=docs.filter(x=>x.kind==="coefficient"&&x.pid===pid&&x.data.cableId===cable&&x.date<=asOf&&x.createdAt<=createdAt).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt));must(list[0],"Сначала добавьте контрольное взвешивание для ПИД и типа кабеля");return list[0];}
+export type WoundMeasurement={directMm:number|null;grams:number|null;weighedOn:string|null;calculatedMm:number|null;coefficient:{id:string;version:number;sampleMm:number;sampleGrams:number}|null};
+export function woundLength(m?:WoundMeasurement|null){return m?.directMm??m?.calculatedMm??null;}
+export function prepareWoundMeasurement(docs:Doc[],pid:string,cableId:string,count:number,input:any,old:WoundMeasurement|undefined,now:string):WoundMeasurement{
+ const present=(v:unknown)=>v!==undefined&&v!==null&&String(v).trim()!=="";
+ const directMm=present(input?.metres)?decimal(input.metres):null;
+ const grams=present(input?.kg)?decimal(input.kg):null;
+ must(directMm===null||(count===0?directMm===0:directMm>0),"Длина намотанного кабеля должна быть больше нуля; если ещё неизвестна — оставьте поле пустым");
+ must(grams===null||(grams>0&&count>0),"Для взвешивания нужны катушки и масса кабеля больше нуля");
+ if(grams===null)return {directMm,grams:null,weighedOn:null,calculatedMm:null,coefficient:null};
+ const weighedOn=validDate(input.weighedOn);must(weighedOn<=today(new Date(now)),"Дата взвешивания не может быть в будущем");
+ // Later weights use the sample available on the weighing date, even for an opening balance.
+ // Reopening an unchanged measurement must not substitute a newer calibration.
+ const previous=old?.weighedOn===weighedOn?old.coefficient:null;
+ const sample=previous?null:coefficient(docs,pid,cableId,weighedOn,now);
+ const k=previous||{id:sample!.id,version:sample!.version,sampleMm:sample!.data.sampleMm,sampleGrams:sample!.data.sampleGrams};
+ return {directMm,grams,weighedOn,calculatedMm:lengthFromMass(grams,k.sampleGrams,k.sampleMm),coefficient:k};
+}
+export function windingTotals(docs:Doc[],asOf=today(),pid?:string,dayOnly=false){
+ let knownMm=0,unknownCoils=0,coils=0;
+ const add=(count:number,mm:number|null)=>{coils+=count;if(mm===null)unknownCoils+=count;else knownMm+=mm;};
+ for(const d of docs){if(d.date>asOf||(pid&&d.pid!==pid))continue;
+  if(!dayOnly&&d.kind==="opening")add(d.data.accumulatedWound||0,d.data.accumulatedWoundMm??null);
+  if(d.kind==="report"&&d.data.category==="winding"&&d.data.status==="work"&&(!dayOnly||d.date===asOf))for(const l of d.data.lines)add(l.count,woundLength(l.measurement));
+ }
+ return {knownMm,unknownCoils,coils};
+}
 export type Balance={pid:string;cableId:string;mm:number;coils:number;extractedMm:number;wound:number;sentGrams:number;receivedGrams:number;transitGrams:number;differenceGrams:number;adjustMm:number;adjustCoils:number};
 export function balances(docs:Doc[],asOf=today()):Balance[]{
  const map=new Map<string,Balance>();
@@ -62,7 +88,14 @@ export function prepareCommand(docs:Doc[],actor:Actor,cmd:Command,now=new Date()
   must(["work","dayoff","idle"].includes(data.status),"Выберите работу, выходной или простой");
   payload={category,status:data.status,note:String(data.note||"").slice(0,2000),audioId:data.audioId||null};
   if(data.status==="work"&&category==="excavation"){entity(docs,data.cableId,"cable");payload={...payload,cableId:data.cableId,trenchMm:decimal(data.trench),cableMm:decimal(data.cable)};}
-  if(data.status==="work"&&category==="winding"){must(Array.isArray(data.lines)&&data.lines.length>0,"Укажите количество катушек");const used=new Set();payload.lines=data.lines.map((l:any)=>{entity(docs,l.cableId,"cable");must(!used.has(l.cableId),"Тип кабеля повторяется");used.add(l.cableId);return {cableId:l.cableId,count:decimal(l.count,0)};});}
+  if(data.status==="work"&&category==="winding"){must(Array.isArray(data.lines)&&data.lines.length>0,"Укажите количество катушек");const used=new Set();payload.lines=data.lines.map((l:any)=>{
+   entity(docs,l.cableId,"cable");must(!used.has(l.cableId),"Тип кабеля повторяется");used.add(l.cableId);
+   const count=decimal(l.count,0),previous=old?.data.lines?.find((x:any)=>x.cableId===l.cableId);
+   if(l.measurement===undefined&&previous?.measurement)must(count===previous.count,"Обновите приложение, чтобы сверить метры при изменении количества катушек");
+   const measurement=l.measurement===undefined?(previous?.measurement??undefined):prepareWoundMeasurement(docs,pid!,l.cableId,count,l.measurement,previous?.measurement,now);
+   must(!measurement?.weighedOn||measurement.weighedOn>=date,"Дата взвешивания не может быть раньше даты намотки");
+   return {cableId:l.cableId,count,...(measurement?{measurement}:{})};
+  });}
  }
  else if(cmd.action==="trip"){
   if(old){must(old.kind==="trip","Неверный рейс");must(old.author===actor.id||isAdmin(actor),"Исправить отправку может отправитель",403);must(old.pid===pid&&old.date===date,"ПИД и дата рейса закреплены; перенос требует отдельной сверки");allowed(actor,"shipper");}else checkPid(actor,docs,pid!,date,"shipper");
@@ -107,7 +140,16 @@ export function prepareCommand(docs:Doc[],actor:Actor,cmd:Command,now=new Date()
   must(!docs.some(d=>d.kind==="assignment"&&d.id!==id&&d.data.userId===data.userId&&d.data.pid===pid&&d.data.role===data.role&&d.data.from<=(until||"9999-12-31")&&(d.data.until||"9999-12-31")>=from),"Закрепление на эти даты уже есть");payload={userId:data.userId,pid,role:data.role,from,until};date=from;
  }
  else if(cmd.action==="opening"){
-  allowed(actor,"admin");const p=entity(docs,pid!,"pid");entity(docs,data.cableId,"cable");date=p.data.cutoff;id=old?.id||"opening:"+pid+":"+data.cableId;must(old||!docs.some(x=>x.id===id),"Начальный остаток уже задан");payload={cableId:data.cableId,mm:decimal(data.metres),coils:decimal(data.coils,0),accumulatedExtractedMm:decimal(data.accumulatedExtracted||"0"),accumulatedWound:decimal(data.accumulatedWound||"0",0)};
+  allowed(actor,"admin");const p=entity(docs,pid!,"pid");entity(docs,data.cableId,"cable");date=p.data.cutoff;id=old?.id||"opening:"+pid+":"+data.cableId;must(old||!docs.some(x=>x.id===id),"Начальный остаток уже задан");
+  if(old)must(old.pid===pid&&old.data.cableId===data.cableId,"ПИД и тип начального остатка закреплены за записью");
+  const mm=decimal(data.metres),coils=decimal(data.coils,0);
+  if(data.woundMeasurement===undefined&&old?.data.woundMeasurement)must(coils===old.data.coils,"Обновите приложение, чтобы сверить метры при изменении количества катушек");
+  const woundMeasurement=data.woundMeasurement===undefined?(old?.data.woundMeasurement??undefined):prepareWoundMeasurement(docs,pid!,data.cableId,coils,data.woundMeasurement,old?.data.woundMeasurement,now);
+  must(woundMeasurement?.directMm==null||woundMeasurement.directMm<=mm,"Длина кабеля в катушках не может превышать весь кабель на ПИД");
+  const accumulatedWound=decimal(data.accumulatedWound||"0",0);
+  const accumulatedWoundMm=data.accumulatedWoundMetres===undefined?(old?.data.accumulatedWoundMm??null):String(data.accumulatedWoundMetres??"").trim()===""?null:decimal(data.accumulatedWoundMetres);
+  must(accumulatedWoundMm===null||(accumulatedWound===0?accumulatedWoundMm===0:accumulatedWoundMm>0),"Проверьте метры и катушки намотки до начала учёта; неизвестную длину оставьте пустой");
+  payload={cableId:data.cableId,mm,coils,accumulatedExtractedMm:decimal(data.accumulatedExtracted||"0"),accumulatedWound,accumulatedWoundMm,...(woundMeasurement?{woundMeasurement}:{})};
  }
  else if(cmd.action==="draft"){
   const slot=String(data.slot||"");must(slot.length>0&&slot.length<200,"Неверный черновик");id="draft:"+actor.id+":"+slot;old=docs.find(d=>d.id===id);if(old)must(cmd.expectedVersion===old.version,"Черновик изменён в другом окне",409);payload={slot,values:data.values};pid=null;
