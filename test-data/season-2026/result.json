@@ -1,0 +1,219 @@
+{
+  "dbFile": "outputs/season-2026/run-1789015687401.sqlite",
+  "checks": 755,
+  "reportSlots": 473,
+  "reportViolations": 94,
+  "violationPercent": 19.873150105708245,
+  "weekdays": 43,
+  "users": [
+    {
+      "id": "sim:admin",
+      "name": "ТЕСТ · Михаил Ломоносов",
+      "roles": [
+        "admin"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:shipper",
+      "name": "ТЕСТ · Исаак Ньютон",
+      "roles": [
+        "shipper"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:warehouse",
+      "name": "ТЕСТ · Мария Кюри",
+      "roles": [
+        "warehouse"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:observer",
+      "name": "ТЕСТ · Альберт Эйнштейн",
+      "roles": [
+        "observer"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:admin2",
+      "name": "ТЕСТ · Дмитрий Менделеев",
+      "roles": [
+        "admin"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:101:foreman:0",
+      "name": "ТЕСТ · Николай Лобачевский",
+      "roles": [
+        "foreman"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:101:foreman:1",
+      "name": "ТЕСТ · Сергей Королёв",
+      "roles": [
+        "foreman"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:101:winder:2",
+      "name": "ТЕСТ · Софья Ковалевская",
+      "roles": [
+        "winder"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:101:winder:3",
+      "name": "ТЕСТ · Никола Тесла",
+      "roles": [
+        "winder"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:202:foreman:0",
+      "name": "ТЕСТ · Иван Павлов",
+      "roles": [
+        "foreman"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:202:foreman:1",
+      "name": "ТЕСТ · Леонард Эйлер",
+      "roles": [
+        "foreman"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:202:winder:2",
+      "name": "ТЕСТ · Ада Лавлейс",
+      "roles": [
+        "winder"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:303:foreman:0",
+      "name": "ТЕСТ · Нильс Бор",
+      "roles": [
+        "foreman"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:303:foreman:1",
+      "name": "ТЕСТ · Макс Планк",
+      "roles": [
+        "foreman"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:303:winder:2",
+      "name": "ТЕСТ · Алан Тьюринг",
+      "roles": [
+        "winder"
+      ],
+      "telegramId": ""
+    },
+    {
+      "id": "sim:303:winder:3",
+      "name": "ТЕСТ · Галилео Галилей",
+      "roles": [
+        "winder"
+      ],
+      "telegramId": ""
+    }
+  ],
+  "documentVersions": 590,
+  "trips": 12,
+  "receivedTrips": 11,
+  "balances": [
+    {
+      "pid": "pid:101",
+      "cableId": "sim:cable:1",
+      "mm": 2842000,
+      "warehouseGrams": 6665000,
+      "transitGrams": 0,
+      "coils": 39
+    },
+    {
+      "pid": "pid:101",
+      "cableId": "sim:cable:2",
+      "mm": 3085000,
+      "warehouseGrams": 3050000,
+      "transitGrams": 0,
+      "coils": 65
+    },
+    {
+      "pid": "pid:101",
+      "cableId": "sim:cable:3",
+      "mm": 2900000,
+      "warehouseGrams": 12290000,
+      "transitGrams": 0,
+      "coils": 95
+    },
+    {
+      "pid": "pid:202",
+      "cableId": "sim:cable:1",
+      "mm": 2490000,
+      "warehouseGrams": 6923000,
+      "transitGrams": 0,
+      "coils": 41
+    },
+    {
+      "pid": "pid:202",
+      "cableId": "sim:cable:2",
+      "mm": 3015000,
+      "warehouseGrams": 3170000,
+      "transitGrams": 0,
+      "coils": 14
+    },
+    {
+      "pid": "pid:202",
+      "cableId": "sim:cable:3",
+      "mm": 2925000,
+      "warehouseGrams": 12770000,
+      "transitGrams": 0,
+      "coils": 26
+    },
+    {
+      "pid": "pid:303",
+      "cableId": "sim:cable:1",
+      "mm": 2965000,
+      "warehouseGrams": 5223500,
+      "transitGrams": 1987500,
+      "coils": 65
+    },
+    {
+      "pid": "pid:303",
+      "cableId": "sim:cable:2",
+      "mm": 2365000,
+      "warehouseGrams": 2480000,
+      "transitGrams": 810000,
+      "coils": 93
+    },
+    {
+      "pid": "pid:303",
+      "cableId": "sim:cable:3",
+      "mm": 2430000,
+      "warehouseGrams": 9950000,
+      "transitGrams": 3300000,
+      "coils": 39
+    }
+  ],
+  "reviewIds": [
+    "4b97cba5-cea6-492b-b00a-f71b2ca9c0fa"
+  ],
+  "datasetSha256": "3d2948a26be562b9e0151fad23b37dd85478f7f03674aebcfa010455e69f0d72"
+}
