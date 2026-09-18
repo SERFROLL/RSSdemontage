@@ -15,7 +15,14 @@ export function decimal(value:unknown,places=3,allowNegative=false):number{
  must((s.split(".")[1]?.length??0)<=places,"Допустимо не более "+places+" знаков после запятой");
  const n=Math.round(Number(s)*10**places);must(Number.isSafeInteger(n)&&Math.abs(n)<=1e12,"Число слишком велико");return n;
 }
-export function weightList(value:string):number[]{const parts=value.trim().split(/[\s;]+/).filter(Boolean);must(parts.length>0,"Введите массы катушек");must(parts.length<=250,"Не более 250 катушек в одном блоке");return parts.map(p=>{const w=decimal(p);must(w>0,"Масса должна быть больше нуля");return w;});}
+export function weightList(value:string):number[]{
+ must(typeof value==="string","Введите массы катушек через пробел");
+ // A comma belongs to the decimal value, never to the list separator.
+ // Keep semicolons supported for saved drafts from earlier app versions.
+ const parts=value.trim().split(/[\s;]+/).filter(Boolean);
+ must(parts.length>0,"Введите массы катушек через пробел");must(parts.length<=250,"Не более 250 катушек в одном блоке");
+ return parts.map((p,i)=>{try{const w=decimal(p);must(w>0,"Масса должна быть больше нуля");return w;}catch(error){if(error instanceof DomainError)throw new DomainError("Катушка № "+(i+1)+": "+error.message);throw error;}});
+}
 export function lengthFromMass(grams:number,sampleGrams:number,sampleMm:number){must(sampleGrams>0&&sampleMm>0,"Нет контрольного взвешивания");const result=Number((BigInt(grams)*BigInt(sampleMm)+BigInt(Math.floor(sampleGrams/2)))/BigInt(sampleGrams));must(Number.isSafeInteger(result),"Расчётная длина вне допустимого диапазона");return result;}
 export const sum=(a:number[])=>a.reduce((x,y)=>x+y,0);
 export function entity(docs:Doc[],id:string,kind?:string){const d=docs.find(x=>x.id===id&&(!kind||x.kind===kind));must(d,"Запись не найдена",404);return d;}

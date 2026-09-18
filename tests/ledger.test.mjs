@@ -9,6 +9,21 @@ const cmd=(action,data,old)=>({action,data:{...data,...(old?{reason:data.reason|
 const replace=(docs,d)=>[...docs.filter(x=>x.id!==d.id),{...d,seq:Math.max(0,...docs.map(x=>x.seq||0))+1}];
 const report=(status="work")=>({pid:"pid:1234",date:today(),category:"excavation",status,cableId:"cable:mksb",trench:"210",cable:"420"});
 test("Russian decimal masses parse without losing grams",()=>{assert.equal(decimal("123,456"),123456);assert.deepEqual(weightList("123 234\n345;456,5"),[123000,234000,345000,456500]);});
+test("Space-separated shipment weights preserve every coil and exact total",()=>{
+ const list=weightList("801 803 806 900");assert.equal(list.length,4);assert.equal(list.reduce((a,b)=>a+b,0),3310000);
+ assert.deepEqual(weightList(" 801,5  803\t806.125\n900\u00a0950 "),[801500,803000,806125,900000,950000]);
+ const trip=prepareCommand(seed(),actors.shipper,cmd("trip",{pid:"pid:1234",date:today(),groups:[{cableId:"cable:mksb",masses:"801 803 806 900"}]}));
+ assert.deepEqual(trip.data.coils.map(c=>c.grams),list);assert.equal(new Set(trip.data.coils.map(c=>c.id)).size,4);
+});
+test("Invalid coil in a list rejects the whole shipment and identifies its position",()=>{
+ for(const mass of ["bad","-2","0","1e3","801,803,806","1.2345"]){
+  const masses="801 "+mass+" 900";
+  assert.throws(()=>weightList(masses),/Катушка № 2:/);
+  assert.throws(()=>prepareCommand(seed(),actors.shipper,cmd("trip",{pid:"pid:1234",date:today(),groups:[{cableId:"cable:mksb",masses}]})),/Катушка № 2:/);
+ }
+ assert.throws(()=>weightList(" \n\t "),/Введите массы/);
+ assert.throws(()=>weightList(Array(251).fill("1").join(" ")),/Не более 250/);
+});
 test("Invalid masses, exponent notation and excess precision rejected",()=>{for(const x of ["-1","NaN","1e3","1,2,3","1.2345",""])assert.throws(()=>decimal(x));assert.throws(()=>weightList("0"));assert.throws(()=>decimal("1,5",0));});
 test("Sample conversion has dimensional correctness",()=>{assert.equal(lengthFromMass(1158000,20000,10000),579000);});
 test("Extraction adds cable metres but winding count is independent",()=>{let d=seed(),before=balances(d).find(x=>x.pid==="pid:1234"&&x.cableId==="cable:mksb");const r=prepareCommand(d,actors.foreman,cmd("report",report()));d=replace(d,r);const after=balances(d).find(x=>x.pid===before.pid&&x.cableId===before.cableId);assert.equal(after.mm-before.mm,420000);assert.equal(after.coils,before.coils);});
