@@ -1,0 +1,53 @@
+'use client';
+import {useState} from 'react';
+import {CoilTable} from './concise-coils';
+import {BalanceValue} from './concise-balance';
+import {inBalanceScope,type BalanceQuery,type BalanceColumn} from '@/lib/concise-balance';
+import {PidProgress} from './concise-pid';
+import {Choice,Field} from './review-common';
+import {Button} from './ui/button';
+import * as M from '@/lib/concise-model';
+export type DocFilter={ids?:string[];title?:string;balance?:BalanceQuery};
+export function StatsPanel({s,actor,onDocs,compact=false,initialQuery}:{s:M.State;actor:string;compact?:boolean;initialQuery?:BalanceQuery;onDocs:(f?:DocFilter)=>void}){
+ const [view,setView]=useState('materials'),[cableUnit,setCableUnit]=useState(initialQuery?.unit||'tonnes'),[period,setPeriod]=useState(initialQuery?'custom':'month'),[from,setFrom]=useState(initialQuery?.from||s.today.slice(0,8)+'01'),[to,setTo]=useState(initialQuery?.to||s.today),[scope,setScope]=useState(initialQuery?.scope||'all'),[selectedMaterial,setMat]=useState('all');
+ const mat=compact?'all':selectedMaterial;
+ const choosePeriod=(p:string)=>{setPeriod(p);setTo(s.today);if(p==='today')setFrom(s.today);if(p==='month')setFrom(s.today.slice(0,8)+'01');if(p==='week'){const d=new Date(s.today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));setFrom(d.toISOString().slice(0,10));}};
+ const inScope=(w:string)=>inBalanceScope(s,scope,actor,w);
+ const balanceQuery=(material:string,column:BalanceColumn):BalanceQuery=>({scope,actor,material,column,from,to,unit:'tonnes'});
+ const inWorkScope=(a:M.Assignment)=>scope==='mine'?M.canReport(s,a,actor):inScope(a.warehouse);
+ const pids=M.pidCatalog(s).filter(p=>scope==='all'||scope==='mine'&&s.warehouses.some(w=>w.pid===p.id&&(M.canManageWarehouse(s,w.id,actor)||s.tasks.some(t=>t.assignment.warehouse===w.id&&M.canReport(s,t.assignment,actor))))||scope==='pid:'+p.id||s.warehouses.some(w=>w.id===scope&&w.pid===p.id)).map(p=>p.id);
+ const docs=s.documents.filter((d):d is M.WorkDoc=>d.kind==='work'&&inWorkScope(d.assignment)&&M.workMaterialMatches(d.assignment,mat)&&d.date<=to);
+ const tasks=s.tasks.filter(t=>t.source!=='restored'&&inWorkScope(t.assignment)&&M.workMaterialMatches(t.assignment,mat)&&t.date>=from&&t.date<=to);
+ const closed=tasks.filter(t=>M.taskDoc(s,t.id)),late=closed.filter(t=>new Date(M.taskDoc(s,t.id)!.versions[0].at)>new Date(t.date+'T21:00:00+07:00')),overdue=tasks.filter(t=>!M.taskDoc(s,t.id)&&(t.date<s.today||t.date===s.today&&s.hour>=21));
+ const selected=docs.filter(d=>d.date>=from),strips=selected.filter(d=>d.assignment.work==='strip'),pay:Record<string,number>={};
+ strips.forEach(d=>{const v=M.current(d),parts=M.payout(v.qty*v.rate,v.crew);v.crew.forEach((c,i)=>pay[c.employee]=(pay[c.employee]||0)+parts[i]);});
+ const kinds=(scope==='mine'?M.personalMaterialKinds(s,actor,to):(['metal','cable'] as const)).filter(k=>mat==='all'||s.materials.some(m=>m.id===mat&&m.kind===k));
+ const personalWorks=(Object.keys(M.works) as M.Work[]).filter(w=>scope!=='mine'||docs.some(d=>d.assignment.work===w)||tasks.some(t=>t.assignment.work===w)||s.assignments.some(a=>a.active&&a.work===w&&inWorkScope(a)));
+ const showStrip=scope!=='mine'||personalWorks.includes('strip');
+ const showPay=actor==='admin'||s.warehouses.some(w=>w.kind==='master'&&M.canManageWarehouse(s,w.id,actor));
+ const cell=(value:number,ids:string[],title:string,unit='')=><button className="c-number-link" onClick={()=>onDocs({ids:[...new Set(ids)],title})}>{M.fmt(value)}{unit}</button>;
+ return <>
+  <div className="c-heading"><div><h1>Показатели работы</h1><p>{M.dateLabel(from)} — {M.dateLabel(to)}</p></div></div>
+  <div className="c-segments periods">{[['today','Сегодня'],['week','Неделя'],['month','Месяц'],['custom','Период']].map(([v,t])=><button key={v} aria-pressed={period===v} onClick={()=>choosePeriod(v)}>{t}</button>)}</div>
+  {period==='custom'&&<div className="c-grid-two"><Field label="С" type="date" value={from} onChange={setFrom}/><Field label="По" type="date" value={to} onChange={setTo}/></div>}
+  {compact?<div className="c-segments" aria-label="Область наблюдения"><button aria-pressed={scope==='mine'} onClick={()=>setScope('mine')}>Я</button><button aria-pressed={scope==='all'} onClick={()=>setScope('all')}>Компания</button></div>:<div className="c-filter-grid"><Choice label="Область наблюдения" value={scope} onChange={setScope} options={[["all","Вся компания"],...(!['admin','director','accountant'].includes(actor)?[["mine","Мои склады"] as [string,string]]:[]),...[...new Set(s.warehouses.map(w=>w.pid).filter(Boolean))].map(p=>['pid:'+p,'ПИД'+p] as [string,string]),...s.warehouses.map(w=>[w.id,w.name] as [string,string]),["transit","В пути / расхождения"]]}/>{!compact&&<Choice label="Материал" value={mat} onChange={setMat} options={[["all","Все материалы"],...s.materials.map(m=>[m.id,m.name] as [string,string])]}/>}</div>}
+  {from>to?<p className="c-error">Начало периода должно быть раньше его окончания.</p>:<>
+  <div className="c-segments"><button aria-pressed={view==='materials'} onClick={()=>setView('materials')}>Материалы</button><button aria-pressed={view==='work'} onClick={()=>setView('work')}>Работы и дисциплина</button></div>
+  {view==='materials'?<>
+   {kinds.map(kind=><section className={'c-balance '+kind} key={kind}><div className="c-section-title"><h2>{kind==='metal'?'Металлы':'Кабель'}</h2><span>{kind==='cable'&&cableUnit==='coils'?'шт.':'тонны'}</span></div>{kind==='cable'&&<div className="c-segments" aria-label="Единица учёта кабеля"><button aria-pressed={cableUnit==='tonnes'} onClick={()=>setCableUnit('tonnes')}>Тонны</button><button aria-pressed={cableUnit==='coils'} onClick={()=>setCableUnit('coils')}>Катушки</button></div>}{kind==='cable'&&cableUnit==='coils'?<CoilTable s={s} from={from} to={to} inScope={inScope} company={scope==='all'} material={mat} scope={scope} actor={actor} onDocs={onDocs}/>:<><div className="c-table-scroll"><table className="c-table balance"><thead><tr><th>Материал</th><th>Было</th><th>＋</th><th>−</th><th>Стало</th></tr></thead><tbody>{s.materials.filter(m=>m.kind===kind&&(mat==='all'||m.id===mat)).map(m=><tr key={m.id}><th>{m.name.replace('Кабель ','')}</th>{(['before','plus','minus','after'] as const).map(column=><td key={column} className={column==='plus'?'c-plus':column==='after'?'c-ending':''}><BalanceValue s={s} query={balanceQuery(m.id,column)} onDocs={onDocs}/></td>)}</tr>)}</tbody></table></div><p className="c-help">{scope==='all'?(kind==='metal'?'＋ Получено при разделке или поступило извне · − выбыло из компании.':'＋ Извлечено или поступило извне · − разделано или выбыло из компании.'):(kind==='metal'?'＋ Получено при разделке и принято · − передано.':'＋ Извлечено и принято · − отправлено и разделано.')} {scope==='all'&&'Передачи между своими складами общий запас не меняют.'}</p></>}</section>)}
+   {!kinds.length&&<p className="c-empty">За вами нет складов материалов. Ваша выработка показана в «Работах и дисциплине».</p>}
+   {pids.length>0&&<PidProgress s={s} from={from} to={to} pids={pids} onDocs={onDocs}/>}
+   <p className="c-help">Нажмите число — откроются документы. Приход из извлечения рассчитан по подтверждённому г/м; отгрузки и приёмки — по взвешиванию. В общей сумме компании учтены партии в пути и неурегулированные расхождения.</p>
+   {showStrip&&<details className="c-details"><summary>Разделка: из кабеля в металлы</summary>{strips.length?<><div className="c-total-line"><span>Разделано кабеля</span>{cell(strips.reduce((a,d)=>a+M.current(d).qty,0),strips.map(d=>d.id),'Разделка',' т')}</div>{['copper','lead','aluminium'].map((m,i)=><div className="c-total-line" key={m}><span>Получено: {M.material(s,m)}</span><b>{M.fmt(strips.reduce((a,d)=>a+(M.current(d).metals?.[i]||0),0))} т</b></div>)}</>:<p>Разделки в выбранном периоде нет.</p>}<p className="c-help">Показан весь выпуск выбранных смен. Невзвешенный остаток не приходуется как материал.</p></details>}
+  </>:<>
+   <div className="c-table-scroll"><table className="c-table"><thead><tr><th>Работа</th><th>До периода</th><th>За период</th><th>Всего</th></tr></thead><tbody>{personalWorks.map(w=>{const before=docs.filter(d=>d.assignment.work===w&&d.date<from),within=selected.filter(d=>d.assignment.work===w),sum=(a:M.WorkDoc[])=>a.reduce((q,d)=>q+M.current(d).qty,0);return <tr key={w}><th>{M.works[w].name}<small>{M.works[w].unit}</small></th><td>{cell(sum(before),before.map(d=>d.id),M.works[w].name+' до периода')}</td><td>{cell(sum(within),within.map(d=>d.id),M.works[w].name+' за период')}</td><td>{cell(sum(before)+sum(within),[...before,...within].map(d=>d.id),M.works[w].name+' всего')}</td></tr>})}</tbody></table></div>
+   <p className="c-help">Это выработка, не складской остаток. Копка и намотка не меняют массу кабеля.</p>
+   <section className="c-card"><h2>Дисциплина сдачи заданий</h2><div className="c-discipline"><div><b>{closed.length}/{tasks.length}</b><span>показателей заполнено</span></div><div><b>{late.length}</b><span>с опозданием</span></div><div><b>{overdue.length}</b><span>просрочено</span></div></div><p className="c-help">Ожидаемые показатели по назначениям за выбранный период. Создание в 09:00, срок сдачи — 21:00, Красноярск.</p><details><summary>По ответственным за склады</summary>{[...new Set(tasks.map(t=>M.assignmentOwner(s,t.assignment)))].map(id=>{const own=tasks.filter(t=>M.assignmentOwner(s,t.assignment)===id),done=own.filter(t=>M.taskDoc(s,t.id));return <div className="c-total-line" key={id}><span>{M.person(s,id)}</span><b>{done.length} / {own.length}</b></div>})}</details></section>
+   {showPay&&showStrip&&<details className="c-details"><summary>Разделка и оплата бригады · {M.fmt(Object.values(pay).reduce((a,b)=>a+b,0),2)} ₽</summary><div className="c-total-line"><span>Разделано</span><b>{M.fmt(strips.reduce((a,d)=>a+M.current(d).qty,0))} т</b></div>{['copper','lead','aluminium'].map((m,i)=><div className="c-total-line" key={m}><span>{M.material(s,m)}</span><b>{M.fmt(strips.reduce((a,d)=>a+(M.current(d).metals?.[i]||0),0))} т</b></div>)}{Object.entries(pay).map(([id,sum])=><div className="c-total-line" key={id}><span>{M.person(s,id)}</span><b>{M.fmt(sum,2)} ₽</b></div>)}<Button variant="outline" onClick={()=>onDocs({ids:strips.map(d=>d.id),title:'Отчёты о разделке и ФОТ'})}>Открыть смены</Button></details>}
+  </>}
+  </>}
+  {!compact&&<a className="c-text-button" href={'/api/operational/export?'+new URLSearchParams({from,to,scope,material:mat})} download>Выгрузить движения за выбранный период · CSV</a>}
+  {compact&&scope==='mine'&&<p className="c-help c-scope-note">«Я» — мои задания и склады, за которые я отвечаю или действую как доверенное лицо. Прогресс — целиком по связанным со мной ПИД.</p>}
+ </>
+}
+

@@ -1,2 +1,2 @@
-import CableApp from "./cable-app";
-export default function Home(){ return <CableApp/>; }
+import EntryApp from './entry-app';
+export default function Home(){return <EntryApp/>}

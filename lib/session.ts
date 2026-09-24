@@ -4,6 +4,7 @@ import {demoDocs} from "./seed";
 import {validateTelegram} from "./telegram-auth";
 export async function session(request:Request){
  const env=runtime();
+ if(env.pool&&env.OPERATIONAL_ROLLBACK!=='true'&&(await env.pool.query('SELECT id FROM operational_state WHERE id=1')).rows.length)throw new DomainError('Откройте обновлённый учёт: /tg или /web. Старый интерфейс закрыт для записи.',409);
  if(env.APP_MODE==="demo"){
   const owner=request.headers.get("oai-authenticated-user-id");if(!owner)throw new DomainError("Для проверочного стенда войдите через ChatGPT",401);
   const namespace="demo:"+owner;await seed(namespace,demoDocs());const docs=await readDocs(namespace);
