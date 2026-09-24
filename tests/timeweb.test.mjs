@@ -40,3 +40,8 @@ test("S3 adapter stores and returns private audio, handles missing objects", asy
     assert.equal(await bucket.get("production/audio/missing"),null);
   } finally { bucket.close(); await new Promise(resolve=>server.close(resolve)); }
 });
+import {ensureSchedulerSecret} from '../server/task-scheduler.mjs';
+
+test('Internal scheduler is enabled without external credentials and preserves configured keys', () => {
+ const config={};const first=ensureSchedulerSecret(config);assert.match(first,/^[a-f0-9]{64}$/);assert.equal(ensureSchedulerSecret(config),first);assert.notEqual(ensureSchedulerSecret({}),first);assert.equal(ensureSchedulerSecret({SCHEDULER_SECRET:'existing-key'}),'existing-key');assert.equal(config.BOT_ENABLED,undefined);
+});

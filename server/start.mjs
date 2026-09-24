@@ -1,7 +1,9 @@
 import { nodeRuntime } from "./runtime.mjs";
 import { migrate, bootstrapOwner } from "./migrate.mjs";
+import { ensureSchedulerSecret } from "./task-scheduler.mjs";
 
 async function main() {
+  ensureSchedulerSecret(process.env);
   const runtime = nodeRuntime();
   if (!runtime.TELEGRAM_BOT_TOKEN) throw new Error("TELEGRAM_BOT_TOKEN is required");
   if (runtime.MINI_APP_URL) {

@@ -46,3 +46,8 @@ the production scheduler and settings no longer use them as the active matrix.
 Only the server may create daily tasks or work-row task records. The database
 state revision, request idempotency key and transaction lock protect simultaneous
 submissions by the owner and delegate.
+
+The Node entrypoint starts the internal scheduling tick even without a configured
+external scheduler credential. It creates a process-local random key only when
+one is absent. Telegram notifications still require the existing BOT_ENABLED
+setting; neither credentials nor notification permissions are exposed or changed.
