@@ -1,0 +1,17 @@
+'use client';
+import {useState} from 'react';
+import * as M from '@/lib/concise-model';
+import * as D from '@/lib/daily-work';
+import {Button} from './ui/button';
+import {Choice} from './review-common';
+import type {Update} from './concise-work';
+export function EmployeeFunctions({s,update,visible}:{s:M.State;update:Update;visible?:Set<string>}){
+ const [edit,setEdit]=useState<D.Duty|null>(null),[error,setError]=useState(''),[message,setMessage]=useState('');
+ const existing=!!edit&&s.duties?.some(d=>d.id===edit.id);
+ const available=edit?s.warehouses.filter(w=>w.owner===edit.employee):[];
+ const form=edit&&<div role="region" aria-label="Функции сотрудника" className="c-form c-inset"><h3>{existing?'Изменить функции':'Назначить функции'}</h3>
+ {existing?<p>{M.person(s,edit.employee)} · {edit.pid?'ПИД'+edit.pid:'Без ПИД'}</p>:<><Choice label="Сотрудник" value={edit.employee} onChange={employee=>{const pid=s.warehouses.find(w=>w.owner===employee)?.pid||'';setEdit({...edit,employee,pid,functions:[]})}} options={[["","Выберите сотрудника"],...s.employees.filter(e=>e.active&&s.warehouses.some(w=>w.owner===e.id)).map(e=>[e.id,e.name] as [string,string])]}/><Choice label="Область работы" value={edit.pid} onChange={pid=>setEdit({...edit,pid,functions:[]})} options={available.map(w=>[w.pid,w.pid?'ПИД'+w.pid:'Без ПИД — разделка'])}/></>}
+ <div className="duty-checkboxes">{D.worksOrder.filter(w=>edit.pid?w!=='strip':w==='strip').map(work=><label className="c-check" key={work}><input type="checkbox" checked={edit.functions.includes(work)} onChange={e=>setEdit({...edit,functions:e.target.checked?[...edit.functions,work]:edit.functions.filter(w=>w!==work)})}/>{M.works[work].name}, {M.works[work].unit}</label>)}</div>
+ <label className="c-check"><input type="checkbox" checked={edit.active} onChange={e=>setEdit({...edit,active:e.target.checked})}/>Создавать суточные задания</label><p className="c-help">Кабели выбираются при вводе работы. Доверенные лица заполняют то же задание. Изменения функций применяются только к новым заданиям.</p>{error&&<p className="c-error" role="alert">{error}</p>}<div className="c-actions"><Button onClick={async()=>{try{await update(st=>D.saveDuty(st,edit));setEdit(null);setMessage('Функции сохранены. Созданные задания не изменились.')}catch(e){setError((e as Error).message)}}}>Сохранить функции</Button><Button variant="ghost" onClick={()=>setEdit(null)}>Отмена</Button></div></div>;
+ return <section><p className="c-help">Одно задание в день на сотрудника и область работы. Создание в 09:00, срок — 21:00, Красноярск. Все дни рабочие.</p>{message&&<p role="status">{message}</p>}<div className="c-table-scroll"><table className="c-table"><thead><tr><th>Сотрудник</th><th>Область работы</th><th>Функции</th><th></th></tr></thead><tbody>{(s.duties||[]).filter(d=>!visible||visible.has(d.id)).map(d=><tr key={d.id}><td>{M.person(s,d.employee)}</td><td>{d.pid?'ПИД'+d.pid:'Без ПИД'}</td><td>{d.functions.map(w=>M.works[w].name).join(', ')}<small>{d.active?'Действует':'Выключено'}</small></td><td><button className="c-text-button" onClick={()=>{setEdit(structuredClone(d));setError('')}}>Изменить</button></td></tr>)}</tbody></table></div><Button variant="outline" onClick={()=>{const w=s.warehouses.find(w=>s.employees.some(e=>e.id===w.owner&&e.active));setEdit({id:'duty:'+crypto.randomUUID(),employee:w?.owner||'',pid:w?.pid||'',functions:[],active:true});setError('')}}>Назначить функции сотруднику</Button>{form}</section>;
+}

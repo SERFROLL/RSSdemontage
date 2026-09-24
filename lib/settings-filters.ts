@@ -6,7 +6,7 @@ export type Identity={employee:string;telegram_id:string;is_admin:boolean};
 export const sections:{id:Section;name:string;fields:[string,string][];primary?:number}[]=[
  {id:'pid',name:'ПИД и длина трассы',primary:3,fields:[['pid','ПИД'],['pidStatus','Статус ПИД'],['locality','Населённый пункт'],['length','Длина']]},
  {id:'trust',name:'Доверенные лица',fields:[['deputy','Доверенное лицо'],['warehouse','Склад / ПИД'],['owner','МОЛ'],['pid','ПИД'],['pidStatus','Статус ПИД'],['locality','Населённый пункт'],['status','Доступ']]},
- {id:'functions',name:'Функции складов',fields:[['owner','МОЛ'],['pid','ПИД'],['warehouse','Склад'],['work','Функция'],['material','Кабель'],['status','Назначение'],['pidStatus','Статус ПИД'],['locality','Населённый пункт']]},
+ {id:'functions',name:'Функции сотрудников',fields:[['owner','Сотрудник'],['pid','ПИД'],['status','Назначение'],['pidStatus','Статус ПИД'],['locality','Населённый пункт']]},
  {id:'staff',name:'Сотрудники',fields:[['status','Работает']]},
  {id:'crew',name:'Состав бригад',fields:[['employee','Сотрудник'],['crew','Бригада'],['warehouse','Склад мастера'],['status','Шаблон']]},
  {id:'warehouses',name:'Склады',fields:[['owner','МОЛ'],['pid','ПИД'],['pidStatus','Статус ПИД'],['locality','Населённый пункт']]},
@@ -25,7 +25,7 @@ export function settingsRows(s:M.State,section:Section,identities:Identity[]=[])
  switch(section){
  case 'pid':return M.pidCatalog(s).map(p=>row(p.id,{...pid(p.id),length:p.lengthM===null?'Не задана':'Задана'},String(p.lengthM??'')));
  case 'trust':return s.replacements.map(r=>row(r.warehouse+'|'+r.deputy,{...wh(r.warehouse),deputy:M.person(s,r.deputy),status:r.active?'Действует':'Выключен'}));
- case 'functions':return s.assignments.map(a=>row(a.id,{...wh(a.warehouse),work:M.works[a.work].name,material:a.material?M.material(s,a.material):'Без кабеля',status:a.active?'Действует':'Выключено'}));
+ case 'functions':if(s.dailyVersion)return (s.duties||[]).map(d=>row(d.id,{...pid(d.pid),owner:M.person(s,d.employee),status:d.active?'Действует':'Выключено'},d.functions.map(w=>M.works[w].name).join(' ')));return s.assignments.map(a=>row(a.id,{...wh(a.warehouse),work:M.works[a.work].name,material:a.material?M.material(s,a.material):'Без кабеля',status:a.active?'Действует':'Выключено'}));
  case 'staff':return s.employees.map(e=>row(e.id,{employee:e.name,status:e.active?'Да':'Нет'}));
  case 'crew':return s.templates.flatMap(t=>(t.members.length?t.members:['']).map(e=>row(t.id+'|'+e,{...wh(t.warehouse||''),employee:e?M.person(s,e):'Нет участников',crew:t.name,status:t.active===false?'Выключен':'Действует'})));
  case 'warehouses':return s.warehouses.map(w=>row(w.id,wh(w.id)));

@@ -1,3 +1,4 @@
+import type {Duty,DailyTask} from './daily-work';
 export const REVISION = 'production-2026-09-23';
 export const STORAGE = 'rss-concise-v7';
 export const START = '2026-09-01';
@@ -5,7 +6,7 @@ export const DAY = '2026-09-16';
 export const works = {dig:{name:'Копка',unit:'м'},extract:{name:'Извлечение',unit:'м'},wind:{name:'Намотка',unit:'шт.'},strip:{name:'Разделка',unit:'т'}};
 export type Work = keyof typeof works;
 export type Employee = {id:string;name:string;active:boolean};
-export type Pid = {id:string;lengthM:number|null;locality?:string;status?:'active'|'planned'|'inactive'|null};
+export type Pid = {id:string;lengthM:number|null;cables?:string[];locality?:string;status?:'active'|'planned'|'inactive'|null};
 export const pidStatuses = {active:'В работе',planned:'В плане',inactive:'Не в работе'};
 export const pidStatusLabel=(p?:Pid)=>p?.status?pidStatuses[p.status]:'Не указано';
 export type Replacement = {warehouse:string;deputy:string;active:boolean};
@@ -29,7 +30,7 @@ export type Opening = {id:string;kind:'opening';date:string;warehouse:string;mat
 export type Adjustment = {id:string;kind:'adjustment';date:string;warehouse:string;material:string;qty:number;actor:string;reason:string;basis:string};
 export type Document = WorkDoc|Transfer|Opening|Adjustment|Exclusion;
 export type Standard = {material?:string;date:string;rate:number;norm:number[]};
-export type State = {version:7;pids:Pid[];replacements:Replacement[];today:string;hour:number;generated:string[];employees:Employee[];warehouses:Warehouse[];materials:Material[];assignments:Assignment[];tasks:Task[];documents:Document[];measurements:Measurement[];standards:Standard[];templates:{id:string;name:string;members:string[];warehouse?:string;active?:boolean}[]};
+export type State = {version:7;dailyVersion?:1;duties?:Duty[];dailyTasks?:DailyTask[];pids:Pid[];replacements:Replacement[];today:string;hour:number;generated:string[];employees:Employee[];warehouses:Warehouse[];materials:Material[];assignments:Assignment[];tasks:Task[];documents:Document[];measurements:Measurement[];standards:Standard[];templates:{id:string;name:string;members:string[];warehouse?:string;active?:boolean}[]};
 export const n = (s:string) => /^-?\d+(?:[.,]\d+)?$/.test(s.trim()) ? Number(s.replace(',','.')) : NaN;
 export const fmt = (x:number,d=3) => (Object.is(x,-0)?0:x).toLocaleString('ru-RU',{maximumFractionDigits:d});
 export const dateLabel = (date:string) => new Date(date+'T12:00:00Z').toLocaleDateString('ru-RU',{day:'numeric',month:'long'});

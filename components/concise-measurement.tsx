@@ -6,8 +6,8 @@ import {Choice,Field} from './review-common';
 import type {Update} from './concise-work';
 import * as M from '@/lib/concise-model';
 
-export function MeasurementField({s,task,actor,update,measureId,confirmed,qty,saved,onChange}:{
- s:M.State;task:M.Task;actor:string;update:Update;measureId:string;confirmed:boolean;qty:number;saved?:M.Snapshot;
+export function MeasurementField({s,task,actor,update,measureId,confirmed,qty,saved,onChange,createMeasurement}:{
+ createMeasurement?:(m:M.Measurement)=>Promise<void>;s:M.State;task:M.Task;actor:string;update:Update;measureId:string;confirmed:boolean;qty:number;saved?:M.Snapshot;
  onChange:(id:string,confirmed:boolean)=>void;
 }){
  const [newId,setNewId]=useState(()=>'УМ-'+crypto.randomUUID());
@@ -24,7 +24,7 @@ export function MeasurementField({s,task,actor,update,measureId,confirmed,qty,sa
  const choose=()=>{if(!selection){setError('Выберите удельную массу.');return;}onChange(selection,false);setOpen(false)};
  const create=async()=>{try{
   const item:M.Measurement={id:newId,pid:w.pid,material:a.material,date,gPerM:M.n(grams),author:actor,confirmed:true};
-  await update(st=>M.addTaskMeasurement(st,task.id,item,actor));onChange(item.id,true);setNewId('УМ-'+crypto.randomUUID());setOpen(false);setError('');
+  if(createMeasurement)await createMeasurement(item);else await update(st=>M.addTaskMeasurement(st,task.id,item,actor));onChange(item.id,true);setNewId('УМ-'+crypto.randomUUID());setOpen(false);setError('');
  }catch(e){setError((e as Error).message)}};
  return <div className="c-measure-wrap">
   <div className="c-measure">

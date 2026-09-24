@@ -1,2 +1,2 @@
 import {runtime} from '@/lib/store';
-export async function GET(){let operational=false;try{const e=runtime();operational=!!e.pool&&e.OPERATIONAL_ROLLBACK!=='true'&&(await e.pool.query('SELECT id FROM operational_state WHERE id=1')).rows.length>0;}catch{}return Response.json({operational},{headers:{'Cache-Control':'no-store'}});}
+export async function GET(){let operational=false,workflowVersion=0;try{const e=runtime();if(e.pool&&e.OPERATIONAL_ROLLBACK!=='true'){const r=await e.pool.query("SELECT payload->>'dailyVersion' AS workflow_version FROM operational_state WHERE id=1");operational=r.rows.length>0;workflowVersion=Number(r.rows[0]?.workflow_version||0);}}catch{}return Response.json({operational,workflowVersion},{headers:{'Cache-Control':'no-store'}});}

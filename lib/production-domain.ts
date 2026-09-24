@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import * as Daily from './daily-work';
 import * as M from './concise-model';
 import {coilMovements} from './concise-coils';
 
@@ -10,10 +11,11 @@ const assignment=z.object({id,warehouse:id,material:z.string().max(180),work:z.e
 const measurement=z.object({id,pid:id,material:id,date,gPerM:number.positive(),confirmed:z.literal(true),author:id}).strict();
 const schemas={
  employees:z.object({id,name:z.string().trim().min(3).max(200),active:z.boolean()}).strict(),
- pids:z.object({id,lengthM:number.positive().nullable(),locality:z.string().trim().max(200).optional(),status:z.enum(['active','planned','inactive']).nullable().optional()}).strict(),
+ pids:z.object({id,lengthM:number.positive().nullable(),cables:z.array(id).max(200).optional(),locality:z.string().trim().max(200).optional(),status:z.enum(['active','planned','inactive']).nullable().optional()}).strict(),
  warehouses:z.object({id,name:z.string().min(1).max(240),pid:z.string().max(180),owner:id,kind:z.enum(['field','main','master','sales'])}).strict(),
  materials:z.object({id,name:z.string().trim().min(1).max(240),kind:z.enum(['cable','metal'])}).strict(),
  assignments:assignment,
+ duties:z.object({id,employee:id,pid:z.string().max(180),functions:z.array(z.enum(['dig','extract','wind','strip'])).min(1).max(4),active:z.boolean()}).strict(),
  replacements:z.object({warehouse:id,deputy:id,active:z.boolean()}).strict(),
  measurements:measurement,
  templates:z.object({id,name:z.string().trim().min(1).max(200),members:z.array(id).min(1).max(200),warehouse:id,active:z.boolean().optional()}).strict(),
@@ -30,14 +32,17 @@ export function changes(before:M.State,after:M.State):Patch[]{return Object.keys
  const old=new Map((a as Record<string,unknown>[]).map(row=>[keyFor(key,row),row]));
  if((a as Record<string,unknown>[]).some(row=>!(b as Record<string,unknown>[]).some(x=>keyFor(key,x)===keyFor(key,row))))throw Error('Удаление учётных данных запрещено. Используйте исправление.');
  return {key,rows:(b as Record<string,unknown>[]).filter(row=>!same(old.get(keyFor(key,row)),row))};
-});}
+}).filter(p=>p.rows.length>0);}
 function fail(message:string):never{throw Error(message);}
 function requireAdmin(p:Principal){if(!p.admin)fail('Настройки и уточнения доступны администратору.');}
 export function validateReferences(s:M.State){
  for(const name of ['employees','pids','warehouses','materials','assignments','tasks','documents','measurements','templates'] as const){const rows=s[name];if(new Set(rows.map(x=>x.id)).size!==rows.length)fail('Повторяющиеся коды: '+name);}
  const employee=(id:string)=>s.employees.some(e=>e.id===id), wh=(id:string)=>s.warehouses.some(w=>w.id===id), mat=(id:string)=>s.materials.some(m=>m.id===id);
  for(const w of s.warehouses)if(!employee(w.owner)||w.kind==='field'&&(!w.pid||!s.pids.some(p=>p.id===w.pid)))fail('Проверьте МОЛ и ПИД склада.');
- if(new Set(s.warehouses.map(w=>w.owner+'|'+w.pid+'|'+w.kind)).size!==s.warehouses.length)fail('Склад этого ответственного уже существует.');
+ if(new Set(s.warehouses.map(w=>w.owner+'|'+w.pid+(s.dailyVersion?'':'|'+w.kind))).size!==s.warehouses.length)fail('Склад этого ответственного уже существует.');
+ for(const p of s.pids)if(p.cables?.some(id=>!s.materials.some(m=>m.id===id&&m.kind==='cable')))fail('Неверный кабель ПИД.');
+ for(const d of s.duties||[])Daily.saveDuty({...s,employees:s.employees.map(e=>({...e,active:true})),duties:(s.duties||[]).filter(x=>x.id!==d.id)},d);
+ if(new Set((s.dailyTasks||[]).map(t=>t.id)).size!==(s.dailyTasks||[]).length)fail('Повтор суточного задания.');
  for(const a of s.assignments)if(!wh(a.warehouse)||a.work!=='dig'&&!mat(a.material))fail('Неверное назначение склада или материала.');
  for(const r of s.replacements)if(!wh(r.warehouse)||!employee(r.deputy))fail('Неверное доверенное лицо.');
  for(const m of s.measurements)if(!employee(m.author)||!mat(m.material)||!s.pids.some(p=>p.id===m.pid))fail('Неверные связи удельной массы.');
@@ -55,11 +60,16 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
  let s=structuredClone(state);const actor=p.admin?'admin':p.employee;
  if(!s.employees.some(e=>e.id===p.employee&&e.active))fail('Сотрудник отключён.');
  for(const patch of patches){
-  if(patch.key==='documents'){
+  if(patch.key==='dailySubmission'){
+   if(patch.rows.length!==1)fail('Сохраните одно задание за раз.');
+   const v=z.object({id,edit:z.boolean().optional(),expected:z.array(z.object({id,version:number.int()}).strict()).max(200).optional(),mode:z.enum(['work','off','idle']),reason:text,crew,lines:z.array(z.object({work:z.enum(['dig','extract','wind','strip']),material:z.string().max(180),qty,measureId:id.optional(),confirmed:z.boolean().optional(),metals:z.array(qty).length(3).optional()}).strict()).max(100)}).strict().parse(patch.rows[0]);
+   s=Daily.saveDaily(s,v,p.employee,p.admin);
+  }else if(patch.key==='documents'){
    const proposed=patch.rows as M.Document[];
    if(proposed.every(d=>d.kind==='work')){
     const entries=proposed.map(d=>{
      const doc=d as M.WorkDoc,task=s.tasks.find(t=>t.id===doc.taskId);if(!task)fail('Задание отсутствует.');
+     if(s.dailyVersion&&!M.taskDoc(s,task.id))fail('Заполните общее суточное задание в новой версии приложения.');
      const old=M.taskDoc(s,task.id),version=old?M.current(old).version:0,v=doc.versions?.at(-1);
      if(s.documents.some(d=>d.id===doc.id&&(d.kind!=='work'||d.taskId!==task.id)))fail('Номер документа уже используется.');
      if(!v||v.version!==version+1||doc.id!==(old?.id||'Д-'+task.id))fail('Документ уже изменён. Обновите страницу.');
@@ -111,8 +121,11 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
      if(old)fail('Замер уже существует.');
      const m=value as unknown as M.Measurement;
      const task=s.tasks.find(t=>t.assignment.work==='extract'&&t.assignment.material===m.material&&s.warehouses.find(w=>w.id===t.assignment.warehouse)?.pid===m.pid&&m.date<=t.date&&M.canReport(s,t.assignment,actor));
-     if(!task)fail('Нет доступа к замеру.');
-     s=M.addTaskMeasurement(s,task.id,m,actor);continue;
+     if(task){s=M.addTaskMeasurement(s,task.id,m,actor);continue;}
+     const day=s.dailyTasks?.find(t=>t.functions.includes('extract')&&t.pid===m.pid&&t.materials.includes(m.material)&&m.date<=t.date&&Daily.canFill(s,t,p.employee));
+     if(!day)fail('Нет доступа к замеру.');
+     if(m.date>s.today)fail('Дата измерения ещё не наступила.');
+     s={...s,measurements:[...s.measurements,{...m,author:p.employee}]};continue;
     }
     requireAdmin(p);
     if(key==='employees'&&value.id===p.employee&&value.active===false)fail('Нельзя отключить собственную учётную запись.');
@@ -120,7 +133,9 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
     if(key==='standards'&&old)fail('Правило на эту дату уже есть. Создайте правило с новой датой.');
     if(key==='warehouses'&&old&&!same(old,value))fail('Ответственного проведённого склада менять нельзя. Создайте новый склад и перемещение.');
     if(key==='materials'&&old&&!same(old,value))fail('Материал проведённых документов менять нельзя.');
-    if(key==='assignments')s=M.saveAssignment(s,value as unknown as M.Assignment);
+    if(key==='assignments'&&s.dailyVersion)fail('Используйте функции сотрудника. Обновите страницу.');
+    if(key==='duties')s=Daily.saveDuty(s,value as unknown as Daily.Duty);
+    else if(key==='assignments')s=M.saveAssignment(s,value as unknown as M.Assignment);
     else if(key==='replacements')s=M.saveReplacement(s,value as unknown as M.Replacement);
     else if(key==='pids')s=M.savePid(s,value as unknown as M.Pid);
     else (s as unknown as Record<string,unknown>)[key]=[...records.filter(r=>keyFor(key,r)!==keyFor(key,value)),value];

@@ -3,7 +3,7 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 const out='outputs/operational-test';mkdirSync(out,{recursive:true});
-for(const name of ['concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
+for(const name of ['daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
  const code=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from (['"])\.\/([a-z-]+)\1/g,'from "./$2.mjs"');writeFileSync(`${out}/${name}.mjs`,code);
 }
 writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV;');
@@ -12,6 +12,7 @@ const M=await import(`../${out}/concise-model.mjs`),D=await import(`../${out}/pr
 let checks=0;const check=(name,fn)=>{fn();checks++;console.log('PASS '+name)};
 const today='2026-09-24';
 let s={version:7,today,hour:10,generated:[],employees:[{id:'a',name:'МОЛ А',active:true},{id:'b',name:'МОЛ Б',active:true},{id:'helper',name:'Доверенный',active:true},{id:'boss',name:'Администратор',active:true}],pids:[{id:'101',lengthM:10000}],warehouses:[{id:'a101',name:'А · ПИД101',pid:'101',owner:'a',kind:'field'},{id:'b101',name:'Б · ПИД101',pid:'101',owner:'b',kind:'field'},{id:'main',name:'Основной',pid:'',owner:'b',kind:'main'},{id:'master',name:'Разделка',pid:'',owner:'b',kind:'master'}],materials:[{id:'c',name:'Кабель',kind:'cable'},...['copper','lead','aluminium'].map(id=>({id,name:id,kind:'metal'}))],replacements:[{warehouse:'a101',deputy:'helper',active:true}],assignments:['dig','extract','wind'].map(work=>({id:'a-'+work,warehouse:'a101',material:work==='dig'?'':'c',work,active:true})).concat([{id:'strip',warehouse:'master',material:'c',work:'strip',active:true}]),tasks:[],documents:[],measurements:[{id:'m',pid:'101',material:'c',date:'2026-01-01',gPerM:1688,confirmed:true,author:'a'}],standards:[{material:'c',date:'2026-01-01',rate:20000,norm:[15,15,10]}],templates:[]};
+const legacyFixture=structuredClone(s);
 const a={employee:'a',admin:false},helper={employee:'helper',admin:false},b={employee:'b',admin:false},boss={employee:'boss',admin:true};
 const F=await import(`../${out}/settings-filters.mjs`),P=await import(`../${out}/pid-metadata.mjs`);
 check('Метаданные ПИД не меняют длины, документы, задания и матрицу',()=>{const next=P.applyPidMetadata(s,[{id:'101',locality:'Город',status:'planned'}]);assert.equal(next.pids[0].lengthM,10000);assert.equal(next.pids[0].locality,'Город');for(const key of Object.keys(s).filter(k=>k!=='pids'))assert.deepEqual(next[key],s[key]);assert.deepEqual(M.generate(next,today,10).tasks,M.generate(s,today,10).tasks);const edited=D.applyChanges(next,[{key:'pids',rows:[{id:'101',lengthM:11000}]}],boss);assert.equal(edited.pids[0].status,'planned');assert.equal(edited.pids[0].locality,'Город');});
@@ -48,6 +49,33 @@ check('Сохранена прежняя версия',()=>assert.equal(s.docume
 check('Нельзя исправлением сделать старый остаток отрицательным',()=>{const d=structuredClone(s.documents.find(d=>d.id===forged.id));d.versions.push({...M.current(d),version:3,qty:10,reason:'Ошибка количества'});assert.throws(()=>D.applyChanges(s,[{key:'documents',rows:[d]}],a),/Недостаточно/)});
 check('Тарифы и нормативы разделены по кабелям',()=>assert.equal(M.standardAt({...s,standards:[...s.standards,{material:'other',date:today,rate:1,norm:[0,0,0]}]},today,'c').rate,20000));
 check('ФОТ распределяется без потери копеек',()=>assert.equal(M.payout(100,[{employee:'a',ktu:1},{employee:'b',ktu:1},{employee:'helper',ktu:1}]).reduce((a,b)=>a+b,0),100));
+const Daily=await import(`../${out}/daily-work.mjs`);
+let dailyFixture=structuredClone(legacyFixture);dailyFixture.warehouses=dailyFixture.warehouses.filter(w=>w.id!=='main');
+dailyFixture.materials.push({id:'c2',name:'Второй кабель',kind:'cable'});dailyFixture.assignments.push({id:'strip2',warehouse:'master',material:'c2',work:'strip',active:true});
+dailyFixture.standards.push({material:'c2',date:'2026-01-01',rate:30000,norm:[10,10,10]});
+dailyFixture.documents.push(...['c','c2'].map(material=>({id:'opening-'+material,kind:'opening',date:'2026-01-01',warehouse:'master',material,qty:10,actor:'boss'})));
+let daily=Daily.migrateDaily(M.generate(dailyFixture,today,10));
+check('Миграция объединяет кабели и функции без изменений учёта',()=>{assert.equal(daily.duties.length,2);assert.equal(daily.dailyTasks.length,2);assert.deepEqual(daily.documents,dailyFixture.documents);assert.deepEqual(D.postings(daily),D.postings(dailyFixture));assert.deepEqual(Daily.migrateDaily(daily),daily);});
+const masterTask=daily.dailyTasks.find(t=>t.warehouse==='master'),fieldTask=daily.dailyTasks.find(t=>t.warehouse==='a101');
+check('Личный отбор администратора не включает чужие задания',()=>{assert.equal(daily.dailyTasks.filter(t=>Daily.canFill(daily,t,'boss')).length,0);assert.equal(daily.dailyTasks.filter(t=>Daily.canFill(daily,t,'helper')).length,1)});
+check('Матрица и повтор генерации сохраняют старые задания',()=>{const changed=Daily.saveDuty(daily,{...daily.duties[0],active:false});assert.deepEqual(changed.dailyTasks,daily.dailyTasks);assert.equal(Daily.generateDaily(changed,today,10).dailyTasks.length,2);assert.equal(Daily.generateDaily(changed,'2026-09-25',10).dailyTasks.length,3)});
+const stripSubmission={id:masterTask.id,mode:'work',reason:'',crew:[{employee:'a',ktu:1},{employee:'helper',ktu:2}],lines:[{work:'strip',material:'c',qty:1,metals:[.15,.15,.1]},{work:'strip',material:'c2',qty:2,metals:[.2,.2,.2]}]};
+check('Посторонний не заполняет общую смену',()=>assert.throws(()=>D.applyChanges(daily,[{key:'dailySubmission',rows:[stripSubmission]}],helper),/Нет доступа/));
+daily=D.applyChanges(daily,[{key:'dailySubmission',rows:[stripSubmission]}],b);
+check('Несколько кабелей в одном задании: расход, металлы, общая бригада и ФОТ',()=>{assert.equal(Daily.completed(daily,masterTask),true);assert.equal(M.stock(daily,'master','c'),9);assert.equal(M.stock(daily,'master','c2'),8);assert.equal(M.stock(daily,'master','copper'),.35);const docs=Daily.documents(daily,masterTask);assert.equal(docs.length,2);assert.equal(docs.reduce((n,d)=>n+M.current(d).qty*M.current(d).rate,0),80000);assert.ok(docs.every(d=>M.current(d).actor==='b'&&M.current(d).crew.length===2));});
+check('Повтор закрытой смены запрещён',()=>assert.throws(()=>D.applyChanges(daily,[{key:'dailySubmission',rows:[stripSubmission]}],b),/уже заполнено/));
+const editedStrip={...stripSubmission,edit:true,expected:Daily.documents(daily,masterTask).map(d=>({id:d.id,version:M.current(d).version})),reason:'Исправили измерения',lines:[{work:'strip',material:'c',qty:2,metals:[.3,.3,.2]}]};
+const corrected=D.applyChanges(daily,[{key:'dailySubmission',rows:[editedStrip]}],b);
+check('Исправление смены сохраняет версии и снимает убранную строку из баланса',()=>{assert.equal(M.stock(corrected,'master','c'),8);assert.equal(M.stock(corrected,'master','c2'),10);assert.equal(M.stock(corrected,'master','copper'),.3);assert.ok(Daily.documents(corrected,masterTask).every(d=>d.versions.length===2&&d.versions[0].actor==='b'));assert.throws(()=>D.applyChanges(corrected,[{key:'dailySubmission',rows:[editedStrip]}],b),/заново/)});
+
+check('Неуказанные работы нельзя тихо пропустить',()=>assert.throws(()=>Daily.saveDaily(daily,{id:fieldTask.id,mode:'work',reason:'',crew:[],lines:[{work:'dig',material:'',qty:10}]},'helper'),/каждую/));
+const fieldSubmission={id:fieldTask.id,mode:'work',reason:'',crew:[],lines:[{work:'dig',material:'',qty:1000},{work:'extract',material:'c',qty:2000,measureId:'m',confirmed:true},{work:'wind',material:'c',qty:4}]};
+daily=D.applyChanges(daily,[{key:'dailySubmission',rows:[fieldSubmission]}],helper);
+check('Доверенный закрывает одно задание у себя и МОЛ, автор и склад сохранены',()=>{assert.ok(Daily.completed(daily,fieldTask));assert.ok(Daily.canFill(daily,fieldTask,'a'));assert.ok(Daily.canFill(daily,fieldTask,'helper'));assert.ok(Daily.documents(daily,fieldTask).every(d=>M.current(d).actor==='helper'&&d.assignment.responsible==='a'));assert.equal(M.stock(daily,'a101','c'),3.376)});
+check('Служебные задания нельзя подменить запросом браузера',()=>assert.throws(()=>D.applyChanges(daily,[{key:'dailyTasks',rows:[{...fieldTask,employee:'boss'}]}],boss),/Служебные/));
+check('Отключение сотрудника не уничтожает его историю',()=>{const next=D.applyChanges(daily,[{key:'employees',rows:[{...daily.employees.find(e=>e.id==='a'),active:false}]}],boss);assert.equal(Daily.canFill(next,fieldTask,'a'),false);assert.deepEqual(next.documents,daily.documents)});
+const tomorrow=Daily.generateDaily(daily,'2026-09-25',10),noWork=tomorrow.dailyTasks.find(t=>t.date==='2026-09-25'&&t.warehouse==='master');
+check('Простой закрывает смену без фиктивных кабелей и движения',()=>{const after=D.applyChanges(tomorrow,[{key:'dailySubmission',rows:[{id:noWork.id,mode:'idle',reason:'Нет сырья',crew:[],lines:[]}]}],b);assert.ok(Daily.completed(after,noWork));assert.deepEqual(D.postings(after),D.postings(tomorrow))});
 if(process.env.OPERATIONAL_IMPORT_FILE){const input=JSON.parse(readFileSync(process.env.OPERATIONAL_IMPORT_FILE,'utf8'));D.validateReferences(input.state);const totals={};for(const p of D.postings(input.state).filter(p=>p.unit==='g'&&p.basis==='calculated')){const k=p.warehouse+'|'+p.material;totals[k]=(totals[k]||0)+p.quantity;}assert.deepEqual(totals,input.expectedExtractionGrams);assert.equal(M.stock(input.state,'W003','M007'),129.718);assert.equal(M.stock(input.state,'W003','M008'),97.184);assert.equal(M.stock(input.state,'W003','M009'),13.272);assert.equal(M.stock(input.state,'W006','M007'),143.6488);assert.equal(M.stock(input.state,'W007','M007'),0);console.log('PASS private approved import: all reference links and exact gram controls');checks++;}
 if(process.env.TEST_DATABASE_URL){
  const url=new URL(process.env.TEST_DATABASE_URL);if(!['localhost','127.0.0.1'].includes(url.hostname)||url.pathname!='/pid_cable_test')throw Error('Dedicated local test database required');
@@ -70,6 +98,16 @@ if(process.env.TEST_DATABASE_URL){
   const tgRequest=new Request('https://example.test',{headers:{'x-telegram-init-data':params.toString()}});await A.approveLogin(tgRequest,login.code);
   const approved=await A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})),sessionCookie=approved.headers.get('set-cookie').split(';')[0];assert.equal((await A.authenticate(new Request('https://example.test',{headers:{cookie:sessionCookie}}))).employee,'a');await assert.rejects(A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})));checks++;console.log('PASS Telegram signed approval, cookie session and one-time exchange');
   assert.equal((await pool.query('SELECT material,unit,SUM(quantity) FROM operational_postings GROUP BY material,unit HAVING SUM(quantity)<>0')).rows.length,0);checks++;console.log('PASS PostgreSQL journal balances');
+  await root.query('CREATE SCHEMA IF NOT EXISTS daily_test');const dailyPool=new pg.Pool({connectionString:url.href,options:'-c search_path=daily_test'});
+  try{await migrate(dailyPool);globalThis.OPERATIONAL_TEST_ENV={pool:dailyPool,TELEGRAM_BOT_TOKEN:'test-token'};
+   const clock=S.localNow(),initial=M.generate({...dailyFixture,today:clock.today},clock.today,23);
+   await S.transaction(c=>S.record(c,undefined,initial,1,'daily-fixture','fixture','system',{}));
+   const postingCount=(await dailyPool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n;
+   const results=await Promise.all([S.ensureTasks(),S.ensureTasks()]);const migrated=await S.row();assert.equal(migrated.payload.dailyVersion,1);assert.equal(migrated.payload.dailyTasks.length,2);assert.equal(migrated.revision,2);assert.deepEqual(migrated.payload.documents,initial.documents);assert.equal((await dailyPool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,postingCount);assert.equal((await dailyPool.query('SELECT count(*) AS n FROM operational_backups')).rows[0].n,'1');
+   const target=migrated.payload.dailyTasks.find(t=>t.warehouse==='a101'),request={revision:2,requestId:'daily-request-concurrent-1',patches:[{key:'dailySubmission',rows:[{id:target.id,mode:'off',reason:'Выходной день',crew:[],lines:[]}]}]};
+   const saved=await Promise.allSettled([S.mutate(request,helper),S.mutate({...request,requestId:'daily-request-concurrent-2'},a)]);assert.equal(saved.filter(x=>x.status==='fulfilled').length,1);assert.ok(Daily.completed((await S.row()).payload,target));assert.equal((await dailyPool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,postingCount);checks++;console.log('PASS PostgreSQL atomic one-time daily migration, backup, unchanged postings, concurrent owner/helper closure');
+  }finally{await dailyPool.end();await root.query('DROP SCHEMA daily_test CASCADE');globalThis.OPERATIONAL_TEST_ENV={pool,TELEGRAM_BOT_TOKEN:'test-token'};}
+
  }finally{await pool.end();await root.query('DROP SCHEMA operational_test CASCADE');await root.end();}
 }
 console.log(`Operational checks passed: ${checks}`);

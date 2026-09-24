@@ -1,5 +1,6 @@
 import {runtime} from './store';
 import * as M from './concise-model';
+import * as Daily from './daily-work';
 import {applyChanges,postings,validateReferences,type Principal} from './production-domain';
 import {createHash} from 'node:crypto';
 export const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
@@ -25,10 +26,14 @@ export async function record(client:any,old:M.State|undefined,next:M.State,revis
  await client.query(`INSERT INTO operational_state(id,revision,payload) VALUES(1,$1,$2) ON CONFLICT(id) DO UPDATE SET revision=EXCLUDED.revision,payload=EXCLUDED.payload,updated_at=now()`,[revision,JSON.stringify(next)]);
 }
 export async function ensureTasks(){return transaction(async c=>{
- const current=await row(c),clock=localNow();let s={...current.payload,...clock};
+ const current=await row(c),clock=localNow(),migrated=current.payload.dailyVersion!==1;let s={...Daily.migrateDaily(current.payload),...clock};
+  if(migrated){
+   if(digest(JSON.stringify(s.documents))!==digest(JSON.stringify(current.payload.documents))||digest(JSON.stringify(postings(s)))!==digest(JSON.stringify(postings(current.payload))))throw Error('Миграция изменила учётные данные.');
+   await c.query('INSERT INTO operational_backups(reason,revision,payload) VALUES($1,$2,$3)',['Перед переходом на функции сотрудников и суточные задания',current.revision,JSON.stringify(current.payload)]);
+  }
  const last=current.payload.generated.filter(x=>x>=current.payload.today).sort().at(-1)||current.payload.today;
- for(const date of M.dateRange(last,clock.today))s=M.generate(s,date,date===clock.today?clock.hour:23);
- if(s.tasks.length!==current.payload.tasks.length){await record(c,current.payload,s,current.revision+1,'schedule:'+clock.today+':'+current.revision,digest(JSON.stringify(s.tasks)),'system',{kind:'scheduled_tasks',dates:s.generated.filter(d=>!current.payload.generated.includes(d))});return {revision:current.revision+1,payload:s};}
+ for(const date of M.dateRange(last,clock.today))s=Daily.generateDaily(s,date,date===clock.today?clock.hour:23);
+ if(migrated||s.dailyTasks?.length!==current.payload.dailyTasks?.length||JSON.stringify(s.generated)!==JSON.stringify(current.payload.generated)){await record(c,current.payload,s,current.revision+1,'schedule:'+clock.today+':'+current.revision,digest(JSON.stringify(s.dailyTasks)),'system',{kind:migrated?'daily_tasks_migration':'scheduled_tasks',dailyTasks:s.dailyTasks?.length,duties:s.duties?.length,dates:s.generated.filter(d=>!current.payload.generated.includes(d))});return {revision:current.revision+1,payload:s};}
  return {...current,payload:s};
 });}
 export async function mutate(input:{revision:number;requestId:string;patches:unknown},p:Principal){
