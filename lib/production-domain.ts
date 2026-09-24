@@ -61,6 +61,7 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
     const entries=proposed.map(d=>{
      const doc=d as M.WorkDoc,task=s.tasks.find(t=>t.id===doc.taskId);if(!task)fail('Задание отсутствует.');
      const old=M.taskDoc(s,task.id),version=old?M.current(old).version:0,v=doc.versions?.at(-1);
+     if(s.documents.some(d=>d.id===doc.id&&(d.kind!=='work'||d.taskId!==task.id)))fail('Номер документа уже используется.');
      if(!v||v.version!==version+1||doc.id!==(old?.id||'Д-'+task.id))fail('Документ уже изменён. Обновите страницу.');
      return z.object({taskId:id,qty,mode:z.enum(['work','off','idle']),reason:text,expected:number.int(),measureId:id.optional(),confirmed:z.boolean(),metals:z.array(qty).length(3).optional(),crew}).strict().parse({taskId:task.id,qty:v.qty,mode:v.mode,reason:v.reason,expected:version,measureId:v.measure?.id,confirmed:!!v.measure,metals:v.metals,crew:v.crew});
     });
