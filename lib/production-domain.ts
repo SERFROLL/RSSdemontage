@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {notificationSchema} from './task-notifications';
 import * as Daily from './daily-work';
 import * as M from './concise-model';
 import {coilMovements} from './concise-coils';
@@ -10,7 +11,7 @@ const item=z.object({material:id,sent:qty,received:qty.nullable(),weights:z.arra
 const assignment=z.object({id,warehouse:id,material:z.string().max(180),work:z.enum(['dig','extract','wind','strip']),active:z.boolean()}).strict();
 const measurement=z.object({id,pid:id,material:id,date,gPerM:number.positive(),confirmed:z.literal(true),author:id}).strict();
 const schemas={
- employees:z.object({id,name:z.string().trim().min(3).max(200),active:z.boolean()}).strict(),
+ employees:z.object({id,name:z.string().trim().min(3).max(200),active:z.boolean(),notifications:notificationSchema.optional()}).strict(),
  pids:z.object({id,lengthM:number.positive().nullable(),cables:z.array(id).max(200).optional(),locality:z.string().trim().max(200).optional(),status:z.enum(['active','planned','inactive']).nullable().optional()}).strict(),
  warehouses:z.object({id,name:z.string().min(1).max(240),pid:z.string().max(180),owner:id,kind:z.enum(['field','main','master','sales'])}).strict(),
  materials:z.object({id,name:z.string().trim().min(1).max(240),kind:z.enum(['cable','metal'])}).strict(),

@@ -1,15 +1,14 @@
-import * as Daily from './daily-work';
+import {taskNotification} from './task-notifications';
 import {runtime} from './store';
 import {ensureTasks,pool,localNow} from './production-store';
-import * as M from './concise-model';
 import {sendOnce} from './bot';
 export async function operationalEnabled(){const e=runtime();return !!e.pool&&e.OPERATIONAL_ROLLBACK!=='true'&&(await e.pool.query('SELECT id FROM operational_state WHERE id=1')).rows.length>0;}
 export async function operationalSchedule(){
  const {payload:s}=await ensureTasks(),e=runtime(),clock=localNow();let sent=0;
- if(e.BOT_ENABLED==='true'&&[19,20].includes(clock.hour)){
+ if(e.BOT_ENABLED==='true'){
   const identities=(await pool().query('SELECT employee,telegram_id FROM operational_identities')).rows;
-  for(const i of identities){const pending=(s.dailyTasks||[]).filter(t=>t.date===clock.today&&Daily.canFill(s,t,i.employee)&&!Daily.completed(s,t));if(!pending.length)continue;
-   if(await sendOnce(`operational:${clock.today}:${clock.hour}:${i.employee}`,i.telegram_id,`Напоминание за ${clock.today}: осталось заполнить ${pending.length} заданий. Откройте «Мою работу».`,{inline_keyboard:[[{text:'Моя работа',web_app:{url:new URL('/tg',e.MINI_APP_URL).href}}]]}))sent++;
+  for(const i of identities){const notice=taskNotification(s,i.employee,clock);if(!notice)continue;
+   if(await sendOnce(notice.key,i.telegram_id,notice.text,{inline_keyboard:[[{text:'Мои задания',web_app:{url:new URL('/tg',e.MINI_APP_URL).href}}]]}))sent++;
   }
  }
  return {enabled:true,model:'operational',date:clock.today,sent};

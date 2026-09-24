@@ -2,12 +2,12 @@ import ts from 'typescript';
 import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
+import {DatabaseSync} from 'node:sqlite';
 const out='outputs/operational-test';mkdirSync(out,{recursive:true});
-for(const name of ['daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
+for(const name of ['bot','domain','ledger','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
  const code=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from (['"])\.\/([a-z-]+)\1/g,'from "./$2.mjs"');writeFileSync(`${out}/${name}.mjs`,code);
 }
-writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV;');
-writeFileSync(`${out}/domain.mjs`,'export class DomainError extends Error{constructor(message,status=400){super(message);this.status=status;}}');
+writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV; export const database=()=>runtime().DB; export const readDocs=()=>{throw Error("Not used")}; export const saveDoc=readDocs; export const hash=readDocs;');
 const M=await import(`../${out}/concise-model.mjs`),D=await import(`../${out}/production-domain.mjs`),B=await import(`../${out}/concise-balance.mjs`);
 let checks=0;const check=(name,fn)=>{fn();checks++;console.log('PASS '+name)};
 const today='2026-09-24';
@@ -75,8 +75,63 @@ check('Доверенный закрывает одно задание у себ
 check('Служебные задания нельзя подменить запросом браузера',()=>assert.throws(()=>D.applyChanges(daily,[{key:'dailyTasks',rows:[{...fieldTask,employee:'boss'}]}],boss),/Служебные/));
 check('Отключение сотрудника не уничтожает его историю',()=>{const next=D.applyChanges(daily,[{key:'employees',rows:[{...daily.employees.find(e=>e.id==='a'),active:false}]}],boss);assert.equal(Daily.canFill(next,fieldTask,'a'),false);assert.deepEqual(next.documents,daily.documents)});
 const tomorrow=Daily.generateDaily(daily,'2026-09-25',10),noWork=tomorrow.dailyTasks.find(t=>t.date==='2026-09-25'&&t.warehouse==='master');
+const N=await import(`../${out}/task-notifications.mjs`);
+const noticeClock={today:'2026-09-25',hour:19};
+const prefs={newTasks:false,current:false,overdue:true,hours:[19]};
+const configure=(state,employee,notifications)=>D.applyChanges(state,[{key:'employees',rows:[{...state.employees.find(e=>e.id===employee),notifications}]}],boss);
+check('Уведомления: прежние настройки остаются 19:00 и 20:00, без новых рассылок',()=>{
+ assert.equal(N.taskNotification(tomorrow,'a',{...noticeClock,hour:9}),null);
+ assert.equal(N.taskNotification(tomorrow,'a',noticeClock).taskIds.length,1);
+ assert.equal(N.taskNotification(tomorrow,'a',{...noticeClock,hour:20}).taskIds.length,1);
+ assert.equal(N.taskNotification(tomorrow,'a',{...noticeClock,hour:18}),null);
+ assert.equal(N.taskNotification(tomorrow,'boss',noticeClock),null);
+});
+check('Уведомления меняет только администратор, настройки сохраняются без изменения учёта',()=>{
+ const next=configure(tomorrow,'a',prefs);assert.deepEqual(next.employees.find(e=>e.id==='a').notifications,prefs);
+ assert.deepEqual(next.documents,tomorrow.documents);assert.deepEqual(next.dailyTasks,tomorrow.dailyTasks);assert.deepEqual(D.postings(next),D.postings(tomorrow));
+ assert.throws(()=>D.applyChanges(tomorrow,D.changes(tomorrow,next),a),/администратору/);
+ for(const invalid of [{...prefs,hours:[19,19]},{...prefs,hours:[19,20,21]},{...prefs,hours:[8]},{...prefs,hours:[22]},{...prefs,hours:[]},{...prefs,other:true}])assert.throws(()=>configure(tomorrow,'a',invalid));
+});
+const unfinished=tomorrow.dailyTasks.find(t=>t.date===noticeClock.today&&t.employee==='a');
+const lateTask={...unfinished,id:'late-task',date:'2026-09-23',legacyTaskIds:[]};
+const notices={...tomorrow,dailyTasks:[...tomorrow.dailyTasks,lateTask,{...lateTask,id:'restored-task',restored:true},{...lateTask,id:'future-task',date:'2026-09-26'}]};
+check('Дисциплинированному можно оставить только просрочки, полностью отключить или менять частоту',()=>{
+ const late=configure(notices,'a',prefs);assert.deepEqual(N.taskNotification(late,'a',noticeClock).taskIds,['late-task']);
+ assert.equal(N.taskNotification(late,'a',{...noticeClock,hour:20}),null);
+ const off=configure(notices,'a',{...prefs,overdue:false});assert.equal(N.taskNotification(off,'a',noticeClock),null);
+ const inactive={...notices,employees:notices.employees.map(e=>e.id==='a'?{...e,active:false}:e)};assert.equal(N.taskNotification(inactive,'a',noticeClock),null);
+});
+check('Новые, текущие и просрочки объединены; общая задача учтена один раз',()=>{
+ const combined=configure(notices,'a',{...prefs,newTasks:true,current:true,hours:[9]});
+ const notice=N.taskNotification({...combined,dailyTasks:[...combined.dailyTasks,lateTask]},'a',{...noticeClock,hour:9});assert.equal(notice.taskIds.length,2);assert.match(notice.text,/За сегодня: 1/);assert.match(notice.text,/Просроченных: 1/);
+ assert.equal(notice.key,`operational:${noticeClock.today}:9:a`);
+ const edited=configure(combined,'a',{...prefs,current:true,hours:[9]});assert.equal(N.taskNotification(edited,'a',{...noticeClock,hour:9}).key,notice.key);
+});
+check('Напоминания учитывают закрытие доверенным, простой, срок и независимые настройки помощника',()=>{
+ const done=D.applyChanges(tomorrow,[{key:'dailySubmission',rows:[{id:unfinished.id,mode:'idle',reason:'Простой бригады',crew:[],lines:[]}]}],helper);
+ assert.equal(N.taskNotification(done,'a',noticeClock),null);assert.equal(N.taskNotification(done,'helper',noticeClock),null);
+ const at21=configure(tomorrow,'a',{...prefs,hours:[21]});assert.equal(N.taskNotification(at21,'a',{...noticeClock,hour:21}).taskIds.length,1);
+ assert.equal(N.taskNotification(at21,'a',{...noticeClock,hour:20}),null);
+ assert.ok(N.taskNotification(configure(tomorrow,'a',{...prefs,overdue:false}),'helper',noticeClock));
+});
 check('Простой закрывает смену без фиктивных кабелей и движения',()=>{const after=D.applyChanges(tomorrow,[{key:'dailySubmission',rows:[{id:noWork.id,mode:'idle',reason:'Нет сырья',crew:[],lines:[]}]}],b);assert.ok(Daily.completed(after,noWork));assert.deepEqual(D.postings(after),D.postings(tomorrow))});
 if(process.env.OPERATIONAL_IMPORT_FILE){const input=JSON.parse(readFileSync(process.env.OPERATIONAL_IMPORT_FILE,'utf8'));D.validateReferences(input.state);const totals={};for(const p of D.postings(input.state).filter(p=>p.unit==='g'&&p.basis==='calculated')){const k=p.warehouse+'|'+p.material;totals[k]=(totals[k]||0)+p.quantity;}assert.deepEqual(totals,input.expectedExtractionGrams);assert.equal(M.stock(input.state,'W003','M007'),129.718);assert.equal(M.stock(input.state,'W003','M008'),97.184);assert.equal(M.stock(input.state,'W003','M009'),13.272);assert.equal(M.stock(input.state,'W006','M007'),143.6488);assert.equal(M.stock(input.state,'W007','M007'),0);console.log('PASS private approved import: all reference links and exact gram controls');checks++;}
+{
+ const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE notifications(key TEXT PRIMARY KEY,status TEXT,chat_id TEXT,created_at TEXT,message_id TEXT,error TEXT)');
+ const binding={prepare:sql=>({bind:(...values)=>({first:async()=>db.prepare(sql).get(...values),run:async()=>db.prepare(sql).run(...values)})})};
+ globalThis.OPERATIONAL_TEST_ENV={APP_MODE:'production',BOT_ENABLED:'true',TELEGRAM_BOT_TOKEN:'fake-test-token',DB:binding};
+ const originalFetch=globalThis.fetch;let deliveries=0;
+ globalThis.fetch=async()=>{deliveries++;return Response.json({ok:true,result:{message_id:1}})};
+ try{
+  const {sendOnce}=await import(`../${out}/bot.mjs`),notice=N.taskNotification(tomorrow,'a',noticeClock);
+  const concurrent=await Promise.all([sendOnce(notice.key,'test',notice.text),sendOnce(notice.key,'test',notice.text)]);
+  assert.equal(concurrent.filter(Boolean).length,1);assert.equal(deliveries,1);assert.equal(await sendOnce(notice.key,'test','Changed settings'),false);assert.equal(deliveries,1);
+  checks++;console.log('PASS Notification delivery: concurrent schedule and retries send only once');
+  globalThis.fetch=async()=>{deliveries++;throw Error('Unknown delivery result')};
+  assert.equal(await sendOnce('uncertain','test','test'),false);assert.equal(await sendOnce('uncertain','test','test'),false);assert.equal(deliveries,2);assert.equal(db.prepare('SELECT status FROM notifications WHERE key=?').get('uncertain').status,'uncertain');
+  checks++;console.log('PASS Uncertain delivery is not repeated and does not spam');
+ }finally{globalThis.fetch=originalFetch;delete globalThis.OPERATIONAL_TEST_ENV;db.close()}
+}
 if(process.env.TEST_DATABASE_URL){
  const url=new URL(process.env.TEST_DATABASE_URL);if(!['localhost','127.0.0.1'].includes(url.hostname)||url.pathname!='/pid_cable_test')throw Error('Dedicated local test database required');
  const {default:pg}=await import('pg');const root=new pg.Pool({connectionString:url.href});await root.query('CREATE SCHEMA IF NOT EXISTS operational_test');
@@ -94,6 +149,9 @@ if(process.env.TEST_DATABASE_URL){
   const bad={revision:2,requestId:'request-invalid-0001',patches:[{key:'employees',rows:[{id:'new',name:'Новое имя',active:true}]},{key:'pids',rows:[{id:'101',lengthM:-1}]}]};await assert.rejects(S.mutate(bad,boss));assert.equal((await S.row()).revision,2);assert.ok(!(await S.row()).payload.employees.some(e=>e.id==='new'));checks++;console.log('PASS PostgreSQL atomic rollback');
   const beforeMetadata=await S.row();const metadata=await S.mutate({revision:beforeMetadata.revision,requestId:'request-pid-metadata-0001',patches:[{key:'pids',rows:[{id:'101',lengthM:11000,locality:'Город',status:'planned'}]}]},boss);assert.equal(metadata.payload.pids[0].status,'planned');assert.deepEqual(metadata.payload.documents,beforeMetadata.payload.documents);assert.deepEqual(metadata.payload.assignments,beforeMetadata.payload.assignments);assert.equal((await pool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,initialCount);checks++;console.log('PASS PostgreSQL PID metadata changes no documents or ledger postings');
   const r=await A.beginLogin(new Request('https://example.test/api/operational/auth'));const login=await r.json(),loginCookie=r.headers.get('set-cookie').split(';')[0];
+  const beforeNotifications=await S.row(),notifyEmployee=beforeNotifications.payload.employees.find(e=>e.id==='a');
+  await S.mutate({revision:beforeNotifications.revision,requestId:'request-notifications-0001',patches:[{key:'employees',rows:[{...notifyEmployee,notifications:prefs}]}]},boss);
+  const notificationReload=await S.row();assert.deepEqual(notificationReload.payload.employees.find(e=>e.id==='a').notifications,prefs);assert.deepEqual(notificationReload.payload.dailyTasks,beforeNotifications.payload.dailyTasks);assert.deepEqual(notificationReload.payload.documents,beforeNotifications.payload.documents);assert.equal((await pool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,initialCount);checks++;console.log('PASS PostgreSQL notification preferences persist without changing tasks or ledger');
   const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:123456789})});const key=createHmac('sha256','WebAppData').update('test-token').digest();params.set('hash',createHmac('sha256',key).update([...params].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n')).digest('hex'));
   const tgRequest=new Request('https://example.test',{headers:{'x-telegram-init-data':params.toString()}});await A.approveLogin(tgRequest,login.code);
   const approved=await A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})),sessionCookie=approved.headers.get('set-cookie').split(';')[0];assert.equal((await A.authenticate(new Request('https://example.test',{headers:{cookie:sessionCookie}}))).employee,'a');await assert.rejects(A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})));checks++;console.log('PASS Telegram signed approval, cookie session and one-time exchange');

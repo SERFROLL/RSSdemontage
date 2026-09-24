@@ -1,11 +1,12 @@
 import type {Duty,DailyTask} from './daily-work';
+import type {NotificationSettings} from './task-notifications';
 export const REVISION = 'production-2026-09-23';
 export const STORAGE = 'rss-concise-v7';
 export const START = '2026-09-01';
 export const DAY = '2026-09-16';
 export const works = {dig:{name:'Копка',unit:'м'},extract:{name:'Извлечение',unit:'м'},wind:{name:'Намотка',unit:'шт.'},strip:{name:'Разделка',unit:'т'}};
 export type Work = keyof typeof works;
-export type Employee = {id:string;name:string;active:boolean};
+export type Employee = {id:string;name:string;active:boolean;notifications?:NotificationSettings};
 export type Pid = {id:string;lengthM:number|null;cables?:string[];locality?:string;status?:'active'|'planned'|'inactive'|null};
 export const pidStatuses = {active:'В работе',planned:'В плане',inactive:'Не в работе'};
 export const pidStatusLabel=(p?:Pid)=>p?.status?pidStatuses[p.status]:'Не указано';
