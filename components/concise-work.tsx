@@ -44,12 +44,12 @@ export function WorkPanel({s,actor,update,onTransfer,onDocument,onExclusion}:{s:
  const tasks=s.tasks.filter(t=>M.canReport(s,t.assignment,actor));
  const open=tasks.filter(t=>!M.taskDoc(s,t.id));
  const dates=[...new Set((tab==='todo'?open:tasks.filter(t=>M.taskDoc(s,t.id))).map(t=>t.date))].sort().reverse();
- const shown=all?dates:dates.slice(0,3),done=tasks.length-open.length;
+ const shown=all?dates:dates.slice(0,3),done=tasks.filter(t=>t.date===s.today&&M.taskDoc(s,t.id)).length,expectedToday=tasks.filter(t=>t.date===s.today).length;
  const incoming=s.documents.filter((d):d is M.Transfer=>d.kind==='transfer'&&d.items.every(i=>i.received===null)&&M.canManageWarehouse(s,d.to,actor));
  const outgoing=s.documents.filter((d):d is M.Transfer=>d.kind==='transfer'&&d.items.every(i=>i.received===null)&&M.canManageWarehouse(s,d.from,actor));
  const canSend=s.warehouses.some(w=>M.canManageWarehouse(s,w.id,actor));
  return <>
-  <div className="c-heading"><div><h1>Моя работа</h1><p>{M.dateLabel(s.today)} · {done} из {tasks.length} показателей заполнено</p></div></div>
+  <div className="c-heading"><div><h1>Моя работа</h1><p>{M.dateLabel(s.today)} · за сегодня {done} из {expectedToday} показателей заполнено</p></div></div>
   <div className="c-segments"><button aria-pressed={tab==='todo'} onClick={()=>setTab('todo')}>К заполнению <b>{[...new Set(open.map(t=>t.date))].length}</b></button><button aria-pressed={tab==='done'} onClick={()=>setTab('done')}>Заполненные</button></div>
   <div className="c-days">{shown.map(date=>tab==='todo'?<details className="c-task-fold" key={actor+date} open={date===s.today}><summary><b>{M.taskDateLabel(date)}</b><span>{date===s.today?"Сегодня":"Не заполнено"} · работ: {open.filter(t=>t.date===date).length}</span></summary><DayCard s={s} actor={actor} update={update} tasks={open.filter(t=>t.date===date)}/></details>:<section className="c-day" key={date}><div className="c-day-title"><h3>{M.taskDateLabel(date)}</h3><span className="c-badge">Заполнено</span></div>{tasks.filter(t=>t.date===date&&M.taskDoc(s,t.id)).map(t=>{const d=M.taskDoc(s,t.id)!;const v=M.current(d);return <button className="c-done-line" key={t.id} onClick={()=>onDocument(d.id)}><span>{M.works[t.assignment.work].name}<small>{M.taskPlace(s,t.assignment.warehouse,actor,date)} · ввёл {M.person(s,v.actor)}</small></span><b>{v.mode==='work'?M.fmt(v.qty)+' '+M.works[t.assignment.work].unit:v.mode==='off'?'Выходной':'Простой'} ›</b></button>})}</section>)}</div>
   {!dates.length&&<div className="c-empty">{tab==='todo'?'Всё заполнено. На сегодня незавершённых заданий нет.':'Заполненные задания появятся здесь.'}</div>}

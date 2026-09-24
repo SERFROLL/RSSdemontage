@@ -1,1 +1,5 @@
-{"capabilitySha256":"disabled","payloadSha256":"disabled","expiresAt":"2020-01-01T00:00:00Z"}
+{
+  "capabilitySha256": "5fec5ce90389ee504cbe07f1bbadbcf4de4d8758fdd98b17726776d8916c3fd0",
+  "payloadSha256": "bb75df1010956c5c1e57e8c79b87a0a93b4cbc7c7d31d7ff9255b0c98eb67bd1",
+  "expiresAt": "2026-09-25T00:52:14.970993+00:00"
+}

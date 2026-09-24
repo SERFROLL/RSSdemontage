@@ -43,4 +43,4 @@ export async function mutate(input:{revision:number;requestId:string;patches:unk
   return {revision:current.revision+1,payload:next};
  });
 }
-export function errorResponse(error:unknown){const e=error as {status?:number;message?:string;issues?:unknown};if(e.issues)return Response.json({error:'Проверьте значения полей.'},{status:400});const status=e.status||400;return Response.json({error:status>=500?'Сервис временно недоступен. Данные не потеряны.':e.message||'Не удалось выполнить операцию.'},{status,headers:{'Cache-Control':'no-store'}});}
+export function errorResponse(error:unknown){const e=error as {status?:number;message?:string;issues?:unknown;code?:string};if(e.issues)return Response.json({error:'Проверьте значения полей.'},{status:400});if(e.code==='23505')return Response.json({error:'Такая запись или Telegram ID уже используется.'},{status:409});const status=e.status||400;return Response.json({error:status>=500?'Сервис временно недоступен. Данные не потеряны.':e.message||'Не удалось выполнить операцию.'},{status,headers:{'Cache-Control':'no-store'}});}

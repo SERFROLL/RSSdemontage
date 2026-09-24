@@ -32,7 +32,7 @@ async function main() {
     } catch { console.error("Scheduled check interrupted"); }
     finally { busy = false; }
   }
-  const timer = runtime.BOT_ENABLED === "true" ? setInterval(tick, 60000) : undefined;
+  const timer = runtime.SCHEDULER_SECRET ? setInterval(tick, 60000) : undefined;
   if (timer) { timer.unref(); void tick(); }
   let stopping = false;
   async function stop() {

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+
 const url=process.env.SMOKE_URL || "http://127.0.0.1:8080";
 if(!["localhost","127.0.0.1"].includes(new URL(url).hostname))throw new Error("Smoke checks are restricted to the local test container");
 let ready=false;
@@ -8,6 +9,13 @@ for(let attempt=0;attempt<60;attempt++){
  await new Promise(resolve=>setTimeout(resolve,1000));
 }
 assert.ok(ready,"Container did not become healthy");
+// A successful HTML response alone does not prove the application can start.
+for(const route of ['/tg','/web']){
+ const response=await fetch(url+route);assert.equal(response.status,200);
+ const html=await response.text(),assets=[...new Set([...html.matchAll(/(?:src|href)="(\/assets\/[^"?#]+\.(?:js|css))"/g)].map(m=>m[1]))];
+ assert.ok(assets.length>0,'No client assets: '+route);
+ for(const asset of assets)assert.equal((await fetch(url+asset)).status,200,asset);
+}
 assert.equal((await fetch(url)).status,200);
 assert.equal((await fetch(url+"/api/state",{headers:{"oai-authenticated-user-id":"forged-owner","x-demo-user":"demo-admin"}})).status,401);
 const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:123456789,first_name:"Test owner"})});

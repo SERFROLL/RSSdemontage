@@ -114,6 +114,7 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
      s=M.addTaskMeasurement(s,task.id,m,actor);continue;
     }
     requireAdmin(p);
+    if(key==='employees'&&value.id===p.employee&&value.active===false)fail('Нельзя отключить собственную учётную запись.');
     if(key==='measurements'&&old)fail('Сохранённый коэффициент не переписывается. Добавьте новый замер.');
     if(key==='standards'&&old)fail('Правило на эту дату уже есть. Создайте правило с новой датой.');
     if(key==='warehouses'&&old&&!same(old,value))fail('Ответственного проведённого склада менять нельзя. Создайте новый склад и перемещение.');

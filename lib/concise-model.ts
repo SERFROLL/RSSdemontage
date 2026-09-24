@@ -104,7 +104,7 @@ export function saveDay(s:State,entries:Entry[],actor:string):State{
    else if(selected)measure={id:selected.id,date:selected.date,kgPerM:measurementCoefficient(selected),confirmedBy:actor,method:selected.method,reason:selected.reason};
    else throw Error('Выберите подтверждённый замер для этого ПИД и кабеля на дату работы.');
   }
-  const standard=standardAt(next,task.date,a.material);if(a.work==='strip'&&!standard)throw Error('Нет действующего тарифа и норматива для этого кабеля.');
+  const standard=standardAt(next,task.date,a.material);if(a.work==='strip'&&e.mode==='work'&&e.qty>0&&!standard)throw Error('Нет действующего тарифа и норматива для этого кабеля.');
   const rate=v?.rate??standard?.rate??0,norm=v?.norm??standard?.norm??[0,0,0];
   if(a.work==='strip'&&e.mode==='work'){if(!e.metals||e.metals.length!==3||e.metals.some(q=>!Number.isFinite(q)||q<0)||e.metals.reduce((x,y)=>x+y,0)>e.qty+1e-6)throw Error('Укажите взвешенные металлы. Их масса не может превышать массу кабеля.');if(e.metals.some((q,i)=>Math.abs(q-e.qty*norm[i]/100)>.000001)&&e.reason.trim().length<3)throw Error('Поясните отклонение выхода металлов от нормы.');}
   const rev:Revision={version:e.expected+1,qty:e.qty,actor,at:new Date().toISOString(),reason:e.reason.trim(),mode:e.mode,measure,metals:a.work==='strip'?(e.mode==='work'?e.metals:[0,0,0]):undefined,crew:e.mode==='work'?structuredClone(a.work==='strip'?e.crew:v?.crew||[]):[],rate,norm:[...norm]};
