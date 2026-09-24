@@ -5,7 +5,9 @@ export const DAY = '2026-09-16';
 export const works = {dig:{name:'Копка',unit:'м'},extract:{name:'Извлечение',unit:'м'},wind:{name:'Намотка',unit:'шт.'},strip:{name:'Разделка',unit:'т'}};
 export type Work = keyof typeof works;
 export type Employee = {id:string;name:string;active:boolean};
-export type Pid = {id:string;lengthM:number|null};
+export type Pid = {id:string;lengthM:number|null;locality?:string;status?:'active'|'planned'|'inactive'|null};
+export const pidStatuses = {active:'В работе',planned:'В плане',inactive:'Не в работе'};
+export const pidStatusLabel=(p?:Pid)=>p?.status?pidStatuses[p.status]:'Не указано';
 export type Replacement = {warehouse:string;deputy:string;active:boolean};
 export type ExclusionVersion = {version:number;lengthM?:number;startM?:number;endM?:number;reason:string;actor:string;at:string};
 export type Exclusion = {id:string;kind:'exclusion';date:string;warehouse:string;versions:ExclusionVersion[]};
@@ -162,7 +164,10 @@ export function saveReplacement(s:State,r:Replacement):State{
 export function pidCatalog(s:State):Pid[]{return [...new Set([...s.pids.map(p=>p.id),...s.warehouses.map(w=>w.pid).filter(Boolean)])].map(id=>s.pids.find(p=>p.id===id)||{id,lengthM:null});}
 export function savePid(s:State,pid:Pid):State{
  const id=pid.id.trim();if(!id||pid.lengthM!==null&&(!Number.isFinite(pid.lengthM)||pid.lengthM<=0))throw Error('Укажите номер ПИД и положительную длину трассы в метрах.');
- return {...s,pids:[...s.pids.filter(p=>p.id!==id),{id,lengthM:pid.lengthM}]};
+ if(pid.status!=null&&!Object.hasOwn(pidStatuses,pid.status))throw Error('Неизвестный статус ПИД.');
+ const previous=s.pids.find(p=>p.id===id);
+ const next={...previous,id,lengthM:pid.lengthM,...(pid.locality!==undefined?{locality:pid.locality.trim()}:{}),...(pid.status!==undefined?{status:pid.status}:{})};
+ return {...s,pids:previous?s.pids.map(p=>p.id===id?next:p):[...s.pids,next]};
 }
 export function pidProgress(s:State,pid:string,from:string,to:string){
  const docs=s.documents.filter((d):d is WorkDoc|Exclusion=>(d.kind==='work'&&d.assignment.work==='dig'||d.kind==='exclusion')&&d.date<=to&&s.warehouses.some(w=>w.pid===pid&&w.id===(d.kind==='work'?d.assignment.warehouse:d.warehouse)));

@@ -10,7 +10,7 @@ const assignment=z.object({id,warehouse:id,material:z.string().max(180),work:z.e
 const measurement=z.object({id,pid:id,material:id,date,gPerM:number.positive(),confirmed:z.literal(true),author:id}).strict();
 const schemas={
  employees:z.object({id,name:z.string().trim().min(3).max(200),active:z.boolean()}).strict(),
- pids:z.object({id,lengthM:number.positive().nullable()}).strict(),
+ pids:z.object({id,lengthM:number.positive().nullable(),locality:z.string().trim().max(200).optional(),status:z.enum(['active','planned','inactive']).nullable().optional()}).strict(),
  warehouses:z.object({id,name:z.string().min(1).max(240),pid:z.string().max(180),owner:id,kind:z.enum(['field','main','master','sales'])}).strict(),
  materials:z.object({id,name:z.string().trim().min(1).max(240),kind:z.enum(['cable','metal'])}).strict(),
  assignments:assignment,
