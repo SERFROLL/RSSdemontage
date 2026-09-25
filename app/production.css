@@ -57,4 +57,17 @@
 @media(max-width:600px){.daily-form .c-person-row{display:flex;flex-wrap:wrap;gap:8px}.daily-form .c-person-row>span{flex-basis:100%}.daily-form .c-person-row .c-field{max-width:130px}}
 
 .daily-task[open]>summary{padding:14px 16px;text-align:left;font-size:15px}.daily-task[open]>summary>b,.daily-task[open]>summary>span{display:block}.daily-task[open]>summary::after{display:block;font-size:12px;text-align:right;margin-top:6px}
+
+/* WEB: independent, visible material/owner/PID facets. TG: one compact row. */
+.stats-filters{display:grid;gap:14px;border-bottom:1px solid #d7e3e6;padding-bottom:16px}
+.stats-filter-row{display:grid;grid-template-columns:170px minmax(0,1fr);align-items:start;gap:12px}.stats-filter-row>b{padding-top:9px;font-size:14px}
+.stats-chips{display:flex;flex-wrap:wrap;gap:7px}.stats-chips button{padding:8px 12px;min-height:38px;border:1px solid #cbdcdf;border-radius:8px;background:#fff;color:#23434d;font:inherit;font-size:14px;line-height:1.4;text-align:left;overflow-wrap:anywhere}
+.stats-chips button[aria-pressed=true]{background:#087f78;color:#fff;border-color:#087f78}.stats-chips button:focus-visible{outline:3px solid #83c9c2;outline-offset:2px}
+.stats-active{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px;color:#536977}
+.stats-visibility{display:grid;gap:6px}.stats-visibility small{color:#536977}.stats-pid-filter{display:grid;gap:9px;margin:12px 0 18px}
+.stats-mobile-bar{display:flex;gap:8px;align-items:stretch;min-width:0}.stats-mobile-bar>.form-field{flex:1 1 100px;min-width:0}.stats-mobile-bar>.form-field>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.c-review .stats-mobile-bar select{width:100%;min-width:0;height:44px;font-size:14px;padding:8px 22px 8px 10px;background:#fff;color:#18333e;border:1px solid #d5e2e5;border-radius:9px}
+.c-review .stats-mobile-bar>.c-segments{flex:0 1 190px;min-width:0;margin:0;padding:3px;gap:2px}.c-review .stats-mobile-bar>.c-segments button{font-size:13px;padding:7px 9px;min-height:36px}
+.stats-periods .periods{max-width:650px}
+@media(max-width:700px){.stats-filter-row{grid-template-columns:1fr;gap:7px}.stats-chips button{min-height:42px}.stats-mobile-bar .form-field select{font-size:16px}.c-review .stats-mobile-bar>.c-segments button{padding-inline:7px}}
 .daily-filters{border:1px solid #dce5e7;border-radius:10px;padding:12px}.daily-filters>summary{cursor:pointer;font-size:14px;color:#4e666e}.daily-filters .settings-toolbar{margin-top:12px}.daily-form .c-person-row input{width:72px;border:1px solid #d1dee1;border-radius:8px;padding:8px;background:white;font:inherit}

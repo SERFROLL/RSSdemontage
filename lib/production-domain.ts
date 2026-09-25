@@ -18,7 +18,7 @@ const schemas={
  warehouses:z.object({id,name:z.string().min(1).max(240),pid:z.string().max(180),owner:id,kind:z.enum(['field','main','master','sales'])}).strict(),
  materials:z.object({id,name:z.string().trim().min(1).max(240),kind:z.enum(['cable','metal'])}).strict(),
  assignments:assignment,
- duties:z.object({id,employee:id,pid:z.string().max(180),functions:z.array(z.enum(['dig','extract','wind','strip'])).min(1).max(4),active:z.boolean()}).strict(),
+ duties:z.object({id,employee:id,pid:z.string().max(180),functions:z.array(z.enum(['dig','extract','wind','strip'])).max(4),active:z.boolean()}).strict(),
  replacements:z.object({warehouse:id,deputy:id,active:z.boolean()}).strict(),
  measurements:measurement,
  templates:z.object({id,name:z.string().trim().min(1).max(200),members:z.array(id).min(1).max(200),warehouse:id,active:z.boolean().optional()}).strict(),

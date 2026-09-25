@@ -5,6 +5,8 @@ export type DailyTask={id:string;date:string;employee:string;warehouse:string;pi
 export type DailyLine={work:M.Work;material:string;qty:number;measureId?:string;confirmed?:boolean;metals?:number[]};
 export type DailySubmission={id:string;edit?:boolean;expected?:{id:string;version:number}[];mode:'work'|'off'|'idle';reason:string;lines:DailyLine[];crew:M.Crew[]};
 export const worksOrder:M.Work[]=['dig','extract','wind','strip'];
+// Legacy disabled assignments retain history but display no selected functions.
+export const effectiveFunctions=(d:Duty)=>d.active?d.functions:[];
 const unique=<T,>(a:T[])=>[...new Set(a)];
 export const dutyWarehouse=(s:M.State,d:Pick<Duty,'employee'|'pid'>)=>s.warehouses.find(w=>w.owner===d.employee&&w.pid===d.pid);
 export const dailyId=(date:string,warehouse:string)=>'day:'+date+':'+warehouse;
@@ -36,18 +38,19 @@ export function migrateDaily(s:M.State):M.State{
  return {...s,pids,dailyVersion:1,duties:[...groups.values()],dailyTasks:[...dayGroups.values()]};
 }
 export function saveDuty(s:M.State,d:Duty){
+ d={...d,active:d.functions.length>0};
  const old=s.duties?.find(x=>x.id===d.id);
  if(old&&(old.employee!==d.employee||old.pid!==d.pid))throw Error('Создайте новое назначение для другой области работы.');
  if(!s.employees.some(e=>e.id===d.employee&&(!d.active||e.active)))throw Error('Выберите действующего сотрудника.');
  if(!dutyWarehouse(s,d))throw Error('Сначала создайте склад этого МОЛ для выбранного ПИД или без ПИД.');
- if(!d.functions.length||new Set(d.functions).size!==d.functions.length||d.functions.some(w=>!worksOrder.includes(w)||(d.pid?w==='strip':w!=='strip')))throw Error('Проверьте функции: работы на ПИД или разделка без ПИД.');
+ if(new Set(d.functions).size!==d.functions.length||d.functions.some(w=>!worksOrder.includes(w)||(d.pid?w==='strip':w!=='strip')))throw Error('Проверьте функции: работы на ПИД или разделка без ПИД.');
  if(s.duties?.some(x=>x.id!==d.id&&x.employee===d.employee&&x.pid===d.pid))throw Error('Назначение сотрудника в этой области уже существует.');
  return {...s,duties:old?(s.duties||[]).map(x=>x.id===d.id?d:x):[...(s.duties||[]),d]};
 }
 export function generateDaily(s:M.State,date:string,hour=9):M.State{
  if(hour<9||s.generated.includes(date))return {...s,today:date,hour};
  const added:DailyTask[]=[];
- for(const d of s.duties||[]){if(!d.active||!s.employees.some(e=>e.id===d.employee&&e.active))continue;const w=dutyWarehouse(s,d);if(!w)throw Error('Не найден склад для назначения.');const id=dailyId(date,w.id);if(s.dailyTasks?.some(t=>t.id===id))continue;
+ for(const d of s.duties||[]){if(!effectiveFunctions(d).length||!s.employees.some(e=>e.id===d.employee&&e.active))continue;const w=dutyWarehouse(s,d);if(!w)throw Error('Не найден склад для назначения.');const id=dailyId(date,w.id);if(s.dailyTasks?.some(t=>t.id===id))continue;
   added.push({id,date,employee:d.employee,warehouse:w.id,pid:d.pid,functions:[...d.functions],editors:unique([d.employee,...s.replacements.filter(r=>r.active&&r.warehouse===w.id).map(r=>r.deputy)]),materials:d.pid?[...(s.pids.find(p=>p.id===d.pid)?.cables||[])]:[],legacyTaskIds:[]});
  }
  return {...s,today:date,hour,generated:unique([...s.generated,date]),dailyTasks:[...(s.dailyTasks||[]),...added]};

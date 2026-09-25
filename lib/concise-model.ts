@@ -172,8 +172,8 @@ export function savePid(s:State,pid:Pid):State{
  const next={...previous,id,lengthM:pid.lengthM,...(pid.locality!==undefined?{locality:pid.locality.trim()}:{}),...(pid.status!==undefined?{status:pid.status}:{})};
  return {...s,pids:previous?s.pids.map(p=>p.id===id?next:p):[...s.pids,next]};
 }
-export function pidProgress(s:State,pid:string,from:string,to:string){
- const docs=s.documents.filter((d):d is WorkDoc|Exclusion=>(d.kind==='work'&&d.assignment.work==='dig'||d.kind==='exclusion')&&d.date<=to&&s.warehouses.some(w=>w.pid===pid&&w.id===(d.kind==='work'?d.assignment.warehouse:d.warehouse)));
+export function pidProgress(s:State,pid:string,from:string,to:string,inScope:(warehouse:string)=>boolean=()=>true){
+ const docs=s.documents.filter((d):d is WorkDoc|Exclusion=>(d.kind==='work'&&d.assignment.work==='dig'||d.kind==='exclusion')&&d.date<=to&&inScope(d.kind==='work'?d.assignment.warehouse:d.warehouse)&&s.warehouses.some(w=>w.pid===pid&&w.id===(d.kind==='work'?d.assignment.warehouse:d.warehouse)));
  const qty=(d:WorkDoc|Exclusion)=>d.kind==='work'?current(d).qty:exclusionLength(d.versions.at(-1)!);
  const dig=round(docs.filter(d=>d.kind==='work').reduce((a,d)=>a+qty(d),0)),excluded=round(docs.filter(d=>d.kind==='exclusion').reduce((a,d)=>a+qty(d),0));
  const total=round(dig+excluded),length=s.pids.find(p=>p.id===pid)?.lengthM||null,period=round(docs.filter(d=>d.date>=from).reduce((a,d)=>a+qty(d),0));
