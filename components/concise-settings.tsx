@@ -1,6 +1,7 @@
 'use client';
 import {EmployeeFunctions} from './employee-functions';
 import {NotificationSettings} from './notification-settings';
+import {SummarySettings} from './summary-settings';
 import {Fragment,useEffect,useRef,useState} from 'react';
 import {Button} from './ui/button';
 import {Input} from './ui/input';
@@ -29,6 +30,7 @@ export function SettingsPanel({s,update,section='functions',visible}:{s:M.State;
   {error&&<p className="c-error" role="alert">{error}</p>}{message&&<p className="c-success" role="status">{message}</p>}
   {section==='pid'&&<PidSettings s={s} update={update} visible={visible}/>}
   {section==='notifications'&&<NotificationSettings s={s} update={update} visible={visible}/>}
+  {section==='summaries'&&<SummarySettings s={s} update={update} visible={visible}/>}
   {section==='trust'&&<ReplacementSettings s={s} update={update} visible={visible}/>}
   {section==='functions'&&s.dailyVersion===1&&<EmployeeFunctions s={s} update={update} visible={visible}/>}
   {section==='functions'&&!s.dailyVersion&&<details className="c-setting" open><summary>Функции складов <span>{s.assignments.filter(a=>a.active).length}</span></summary><p className="c-help">Каждый день в 09:00. Все дни рабочие. Изменения относятся только к ещё не созданным заданиям.</p>

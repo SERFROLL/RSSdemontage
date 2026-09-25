@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 const out='outputs/operational-test';mkdirSync(out,{recursive:true});
-for(const name of ['bot','domain','ledger','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
+for(const name of ['bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
  const code=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from (['"])\.\/([a-z-]+)\1/g,'from "./$2.mjs"');writeFileSync(`${out}/${name}.mjs`,code);
 }
 writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV; export const database=()=>runtime().DB; export const readDocs=()=>{throw Error("Not used")}; export const saveDoc=readDocs; export const hash=readDocs;');
@@ -116,6 +116,55 @@ check('Напоминания учитывают закрытие доверен
 });
 check('Простой закрывает смену без фиктивных кабелей и движения',()=>{const after=D.applyChanges(tomorrow,[{key:'dailySubmission',rows:[{id:noWork.id,mode:'idle',reason:'Нет сырья',crew:[],lines:[]}]}],b);assert.ok(Daily.completed(after,noWork));assert.deepEqual(D.postings(after),D.postings(tomorrow))});
 if(process.env.OPERATIONAL_IMPORT_FILE){const input=JSON.parse(readFileSync(process.env.OPERATIONAL_IMPORT_FILE,'utf8'));D.validateReferences(input.state);const totals={};for(const p of D.postings(input.state).filter(p=>p.unit==='g'&&p.basis==='calculated')){const k=p.warehouse+'|'+p.material;totals[k]=(totals[k]||0)+p.quantity;}assert.deepEqual(totals,input.expectedExtractionGrams);assert.equal(M.stock(input.state,'W003','M007'),129.718);assert.equal(M.stock(input.state,'W003','M008'),97.184);assert.equal(M.stock(input.state,'W003','M009'),13.272);assert.equal(M.stock(input.state,'W006','M007'),143.6488);assert.equal(M.stock(input.state,'W007','M007'),0);console.log('PASS private approved import: all reference links and exact gram controls');checks++;}
+const C=await import(`../${out}/company-notifications.mjs`);
+const companySub={id:'company',enabled:true,recipient:'boss',hour:9,periods:['shift','week','month']};
+const adminIdentity=[{employee:'boss',telegram_id:'test-boss',is_admin:true}];
+check('Сводки: завершённые календарные периоды, границы года и високосный месяц',()=>{
+ assert.deepEqual(C.summaryWindow('shift','2026-01-01'),{from:'2025-12-31',to:'2025-12-31'});
+ assert.deepEqual(C.summaryWindow('week','2027-01-04'),{from:'2026-12-28',to:'2027-01-03'});
+ assert.equal(C.summaryWindow('week','2027-01-05'),null);
+ assert.deepEqual(C.summaryWindow('month','2024-03-01'),{from:'2024-02-01',to:'2024-02-29'});
+ assert.deepEqual(C.summaryWindow('month','2026-01-01'),{from:'2025-12-01',to:'2025-12-31'});
+ assert.equal(C.summaryWindow('month','2026-09-25'),null);
+ assert.deepEqual(C.lastCompletePeriod('week','2026-09-25'),{from:'2026-09-14',to:'2026-09-20'});
+});
+check('Сводки: первое сохранение в старой базе, только администратор, учёт неизменен',()=>{
+ const proposed={...daily,summarySubscriptions:[companySub]},patches=D.changes(daily,proposed);
+ assert.equal(patches.length,1);assert.equal(patches[0].key,'summarySubscriptions');
+ const result=D.applyChanges(daily,patches,boss);assert.deepEqual(result.summarySubscriptions,[companySub]);assert.deepEqual(result.documents,daily.documents);assert.deepEqual(result.dailyTasks,daily.dailyTasks);assert.deepEqual(D.postings(result),D.postings(daily));
+ assert.throws(()=>D.applyChanges(daily,patches,a),/администратору/);
+ for(const bad of [{...companySub,recipient:''},{...companySub,periods:[]},{...companySub,periods:['week','week']},{...companySub,id:'discipline'},{...companySub,hour:8},{...companySub,recipient:'unknown'}])assert.throws(()=>D.applyChanges(daily,[{key:'summarySubscriptions',rows:[bad]}],boss));
+ assert.ok(C.summarySubscriptions(daily).every(n=>!n.enabled&&!n.recipient));
+});
+check('Показатели компании: единицы, металлы, только последняя версия, без остатков и передач',()=>{
+ const q=C.companyMetrics(daily,today,today);assert.equal(q.dig,1000);assert.equal(q.extracted,2000);assert.equal(q.extractedTonnes,3.376);assert.equal(q.coils,4);assert.equal(q.stripped,3);assert.deepEqual(q.metals,[.35,.35,.3]);assert.equal(q.tasks,2);assert.equal(q.closed,2);
+ const fixed=C.companyMetrics(corrected,today,today);assert.equal(fixed.stripped,2);assert.deepEqual(fixed.metals,[.3,.3,.2]);
+ assert.equal(C.companyMetrics(daily,'2026-01-01','2026-01-01').stripped,0);
+ const extra={...daily,documents:[...daily.documents,{id:'summary-transfer',kind:'transfer',date:today,from:'a101',to:'master',items:[{material:'c',sent:1,received:1}],weights:[],reason:'',actor:'a'}]};assert.deepEqual(C.companyMetrics(extra,today,today),q);
+});
+const disciplineFixture=structuredClone(daily);
+for(const d of disciplineFixture.documents.filter(d=>d.kind==='work'))for(const v of d.versions)v.at=d.assignment.responsible==='a'?'2026-09-24T14:01:00Z':'2026-09-24T14:00:00Z';
+disciplineFixture.dailyTasks.push(lateTask,{...lateTask,id:'ignored-history',restored:true},{...lateTask,id:'ignored-future',date:'2026-09-26'});
+check('Дисциплина: МОЛ вместо вводившего, ровно 21:00 вовремя, история и будущие дни исключены',()=>{
+ const r=C.disciplineSnapshot(disciplineFixture,{today:'2026-09-25',hour:9});assert.deepEqual(r.rows,[{employee:'a',open:1,closedLate:1,oldest:'2026-09-23'}]);
+ const duplicated={...disciplineFixture,dailyTasks:[...disciplineFixture.dailyTasks,lateTask]};assert.deepEqual(C.disciplineSnapshot(duplicated,{today:'2026-09-25',hour:9}),r);
+ assert.equal(C.companyMetrics(disciplineFixture,today,today).late,1);
+});
+check('Позднее исправление с новой строкой кабеля не превращает своевременную сдачу в опоздание',()=>{
+ const task=disciplineFixture.dailyTasks.find(t=>t.employee==='b'),first=Daily.closedAt(disciplineFixture,task),doc=structuredClone(Daily.documents(disciplineFixture,task)[0]);
+ doc.id='added-line';doc.taskId=task.id+'#strip:added';doc.versions[0].at='2026-09-26T15:00:00Z';
+ assert.equal(Daily.closedAt({...disciplineFixture,documents:[...disciplineFixture.documents,doc]},task),first);
+});
+check('Расписание: выбранные периоды, отключение, отзыв прав и стабильный ключ при смене времени',()=>{
+ const configured={...daily,summarySubscriptions:[companySub,{id:'discipline',enabled:true,recipient:'boss',hour:9,periods:['shift']}]},clock={today:'2026-06-01',hour:9};
+ const rows=C.summaryNotifications(configured,adminIdentity,clock);assert.equal(rows.length,4);assert.equal(new Set(rows.map(r=>r.key)).size,4);
+ assert.equal(C.summaryNotifications(configured,adminIdentity,{...clock,hour:10}).length,0);
+ assert.equal(C.summaryNotifications(configured,adminIdentity.map(i=>({...i,is_admin:false})),clock).length,0);
+ assert.equal(C.summaryNotifications({...configured,employees:configured.employees.map(e=>e.id==='boss'?{...e,active:false}:e)},adminIdentity,clock).length,0);
+ assert.equal(C.summaryNotifications({...configured,summarySubscriptions:configured.summarySubscriptions.map(n=>({...n,enabled:false}))},adminIdentity,clock).length,0);
+ assert.deepEqual(C.summaryNotifications({...configured,summarySubscriptions:configured.summarySubscriptions.map(n=>({...n,hour:10}))},adminIdentity,{...clock,hour:10}).map(n=>n.key),rows.map(n=>n.key));
+ const parts=C.notificationParts(Array.from({length:300},(_,i)=>'Сотрудник '+i+': просрочено 5; сдано с опозданием 1.').join('\n'));assert.ok(parts.length>1);assert.ok(parts.every(p=>p.length<=3500&&p));assert.match(parts.at(-1),/Сотрудник 299/);
+});
 {
  const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE notifications(key TEXT PRIMARY KEY,status TEXT,chat_id TEXT,created_at TEXT,message_id TEXT,error TEXT)');
  const binding={prepare:sql=>({bind:(...values)=>({first:async()=>db.prepare(sql).get(...values),run:async()=>db.prepare(sql).run(...values)})})};
@@ -123,12 +172,15 @@ if(process.env.OPERATIONAL_IMPORT_FILE){const input=JSON.parse(readFileSync(proc
  const originalFetch=globalThis.fetch;let deliveries=0;
  globalThis.fetch=async()=>{deliveries++;return Response.json({ok:true,result:{message_id:1}})};
  try{
-  const {sendOnce}=await import(`../${out}/bot.mjs`),notice=N.taskNotification(tomorrow,'a',noticeClock);
+  const {sendOnce,sendBatchOnce}=await import(`../${out}/bot.mjs`),notice=N.taskNotification(tomorrow,'a',noticeClock);
   const concurrent=await Promise.all([sendOnce(notice.key,'test',notice.text),sendOnce(notice.key,'test',notice.text)]);
   assert.equal(concurrent.filter(Boolean).length,1);assert.equal(deliveries,1);assert.equal(await sendOnce(notice.key,'test','Changed settings'),false);assert.equal(deliveries,1);
   checks++;console.log('PASS Notification delivery: concurrent schedule and retries send only once');
+  const batch=await Promise.all([sendBatchOnce('batch','test',['One','Two']),sendBatchOnce('batch','test',['One','Two'])]);assert.equal(batch.reduce((a,b)=>a+b,0),2);assert.equal(deliveries,3);
+  assert.equal(await sendBatchOnce('batch','test',['Changed','Changed','Extra']),0);assert.equal(deliveries,3);checks++;console.log('PASS Summary batch cannot grow or duplicate after retries');
   globalThis.fetch=async()=>{deliveries++;throw Error('Unknown delivery result')};
-  assert.equal(await sendOnce('uncertain','test','test'),false);assert.equal(await sendOnce('uncertain','test','test'),false);assert.equal(deliveries,2);assert.equal(db.prepare('SELECT status FROM notifications WHERE key=?').get('uncertain').status,'uncertain');
+  assert.equal(await sendOnce('uncertain','test','test'),false);assert.equal(await sendOnce('uncertain','test','test'),false);assert.equal(deliveries,4);assert.equal(db.prepare('SELECT status FROM notifications WHERE key=?').get('uncertain').status,'uncertain');
+  assert.equal(await sendBatchOnce('failed-batch','test',['One','Two']),0);assert.equal(await sendBatchOnce('failed-batch','test',['One','Two']),0);assert.equal(deliveries,5);
   checks++;console.log('PASS Uncertain delivery is not repeated and does not spam');
  }finally{globalThis.fetch=originalFetch;delete globalThis.OPERATIONAL_TEST_ENV;db.close()}
 }
@@ -152,6 +204,10 @@ if(process.env.TEST_DATABASE_URL){
   const beforeNotifications=await S.row(),notifyEmployee=beforeNotifications.payload.employees.find(e=>e.id==='a');
   await S.mutate({revision:beforeNotifications.revision,requestId:'request-notifications-0001',patches:[{key:'employees',rows:[{...notifyEmployee,notifications:prefs}]}]},boss);
   const notificationReload=await S.row();assert.deepEqual(notificationReload.payload.employees.find(e=>e.id==='a').notifications,prefs);assert.deepEqual(notificationReload.payload.dailyTasks,beforeNotifications.payload.dailyTasks);assert.deepEqual(notificationReload.payload.documents,beforeNotifications.payload.documents);assert.equal((await pool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,initialCount);checks++;console.log('PASS PostgreSQL notification preferences persist without changing tasks or ledger');
+  await assert.rejects(S.mutate({revision:notificationReload.revision,requestId:'summary-invalid-recipient-1',patches:[{key:'summarySubscriptions',rows:[{...companySub,recipient:'a'}]}]},boss),/администратор/);
+  assert.equal((await S.row()).revision,notificationReload.revision);
+  await S.mutate({revision:notificationReload.revision,requestId:'summary-valid-recipient-1',patches:D.changes(notificationReload.payload,{...notificationReload.payload,summarySubscriptions:[companySub]})},boss);
+  const summariesReload=await S.row();assert.deepEqual(summariesReload.payload.summarySubscriptions,[companySub]);assert.deepEqual(summariesReload.payload.documents,notificationReload.payload.documents);assert.equal((await pool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,initialCount);checks++;console.log('PASS PostgreSQL summary settings persist, non-admin recipients rejected, ledger unchanged');
   const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:123456789})});const key=createHmac('sha256','WebAppData').update('test-token').digest();params.set('hash',createHmac('sha256',key).update([...params].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n')).digest('hex'));
   const tgRequest=new Request('https://example.test',{headers:{'x-telegram-init-data':params.toString()}});await A.approveLogin(tgRequest,login.code);
   const approved=await A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})),sessionCookie=approved.headers.get('set-cookie').split(';')[0];assert.equal((await A.authenticate(new Request('https://example.test',{headers:{cookie:sessionCookie}}))).employee,'a');await assert.rejects(A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})));checks++;console.log('PASS Telegram signed approval, cookie session and one-time exchange');

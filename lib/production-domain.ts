@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {notificationSchema} from './task-notifications';
+import {summarySchema} from './company-notifications';
 import * as Daily from './daily-work';
 import * as M from './concise-model';
 import {coilMovements} from './concise-coils';
@@ -11,6 +12,7 @@ const item=z.object({material:id,sent:qty,received:qty.nullable(),weights:z.arra
 const assignment=z.object({id,warehouse:id,material:z.string().max(180),work:z.enum(['dig','extract','wind','strip']),active:z.boolean()}).strict();
 const measurement=z.object({id,pid:id,material:id,date,gPerM:number.positive(),confirmed:z.literal(true),author:id}).strict();
 const schemas={
+ summarySubscriptions:summarySchema,
  employees:z.object({id,name:z.string().trim().min(3).max(200),active:z.boolean(),notifications:notificationSchema.optional()}).strict(),
  pids:z.object({id,lengthM:number.positive().nullable(),cables:z.array(id).max(200).optional(),locality:z.string().trim().max(200).optional(),status:z.enum(['active','planned','inactive']).nullable().optional()}).strict(),
  warehouses:z.object({id,name:z.string().min(1).max(240),pid:z.string().max(180),owner:id,kind:z.enum(['field','main','master','sales'])}).strict(),
@@ -27,8 +29,8 @@ export type Principal={employee:string;admin:boolean};
 export type Patch={key:string;rows:unknown[]};
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 const keyFor=(key:string,row:Record<string,unknown>)=>key==='replacements'?`${row.warehouse}|${row.deputy}`:key==='standards'?`${row.material}|${row.date}`:String(row.id);
-export function changes(before:M.State,after:M.State):Patch[]{return Object.keys(before).filter(k=>!same(before[k as keyof M.State],after[k as keyof M.State])).map(key=>{
- const a=before[key as keyof M.State],b=after[key as keyof M.State];
+export function changes(before:M.State,after:M.State):Patch[]{const keys=[...new Set([...Object.keys(before),...(after.summarySubscriptions?['summarySubscriptions']:[])])];return keys.filter(k=>!same(before[k as keyof M.State],after[k as keyof M.State])).map(key=>{
+ const a=before[key as keyof M.State]??(key==='summarySubscriptions'?[]:undefined),b=after[key as keyof M.State];
  if(!Array.isArray(a)||!Array.isArray(b))throw Error('Нельзя изменять служебные данные приложения.');
  const old=new Map((a as Record<string,unknown>[]).map(row=>[keyFor(key,row),row]));
  if((a as Record<string,unknown>[]).some(row=>!(b as Record<string,unknown>[]).some(x=>keyFor(key,x)===keyFor(key,row))))throw Error('Удаление учётных данных запрещено. Используйте исправление.');
@@ -37,6 +39,8 @@ export function changes(before:M.State,after:M.State):Patch[]{return Object.keys
 function fail(message:string):never{throw Error(message);}
 function requireAdmin(p:Principal){if(!p.admin)fail('Настройки и уточнения доступны администратору.');}
 export function validateReferences(s:M.State){
+ if(new Set((s.summarySubscriptions||[]).map(n=>n.id)).size!==(s.summarySubscriptions||[]).length)fail('Повтор настройки сводки.');
+ for(const n of s.summarySubscriptions||[]){summarySchema.parse(n);if(n.recipient&&!s.employees.some(e=>e.id===n.recipient))fail('Получатель сводки не найден.');}
  for(const name of ['employees','pids','warehouses','materials','assignments','tasks','documents','measurements','templates'] as const){const rows=s[name];if(new Set(rows.map(x=>x.id)).size!==rows.length)fail('Повторяющиеся коды: '+name);}
  const employee=(id:string)=>s.employees.some(e=>e.id===id), wh=(id:string)=>s.warehouses.some(w=>w.id===id), mat=(id:string)=>s.materials.some(m=>m.id===id);
  for(const w of s.warehouses)if(!employee(w.owner)||w.kind==='field'&&(!w.pid||!s.pids.some(p=>p.id===w.pid)))fail('Проверьте МОЛ и ПИД склада.');
@@ -117,7 +121,7 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
    const key=patch.key as Catalog;
    for(const row of patch.rows){
     const value=schemas[key].parse(row) as Record<string,unknown>;
-    const records=s[key] as unknown as Record<string,unknown>[],old=records.find(r=>keyFor(key,r)===keyFor(key,value));
+    const records=(s[key]||[]) as unknown as Record<string,unknown>[],old=records.find(r=>keyFor(key,r)===keyFor(key,value));
     if(key==='measurements'&&!p.admin){
      if(old)fail('Замер уже существует.');
      const m=value as unknown as M.Measurement;

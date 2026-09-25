@@ -58,3 +58,15 @@ export async function handleUpdate(update:any){
  const body=u?explanation:"Ваш Telegram ID: "+m.from.id+". Передайте его администратору для назначения доступа.\n\n"+explanation;
  await sendOnce("update:"+update.update_id,String(m.chat.id),body,u?{inline_keyboard:[[{text:"Открыть учёт",web_app:{url:miniUrl(env)}}]]}:undefined);
 }
+// Claim the whole report first: later data edits cannot add extra parts on retries.
+export async function sendBatchOnce(key:string,chatId:string,parts:string[],markup?:any){
+ if(!parts.length)return 0;const db=database();
+ const claim=await db.prepare("INSERT OR IGNORE INTO notifications (key,status,chat_id,created_at) VALUES (?,'sending',?,?) RETURNING key").bind(key,chatId,new Date().toISOString()).first();if(!claim)return 0;
+ let sent=0;
+ for(let i=0;i<parts.length;i++){
+  if(!await sendOnce(key+':part:'+i,chatId,parts[i]+(parts.length>1?`\nЧасть ${i+1} из ${parts.length}`:''),markup)){
+   await db.prepare("UPDATE notifications SET status='uncertain',error=? WHERE key=?").bind('Не все части сводки доставлены; автоматический повтор отключён',key).run();return sent;
+  }sent++;
+ }
+ await db.prepare("UPDATE notifications SET status='sent' WHERE key=?").bind(key).run();return sent;
+}

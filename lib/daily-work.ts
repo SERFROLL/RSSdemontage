@@ -12,7 +12,8 @@ export function canFill(s:M.State,t:DailyTask,employee:string){return s.employee
 export function documents(s:M.State,t:DailyTask){return s.documents.filter((d):d is M.WorkDoc=>d.kind==='work'&&(t.legacyTaskIds.includes(d.taskId)||d.taskId.startsWith(t.id+'#')));}
 export const remaining=(s:M.State,t:DailyTask)=>t.functions.filter(w=>!documents(s,t).some(d=>d.assignment.work===w));
 export const completed=(s:M.State,t:DailyTask)=>remaining(s,t).length===0;
-export const closedAt=(s:M.State,t:DailyTask)=>completed(s,t)?documents(s,t).map(d=>d.versions[0].at).sort().at(-1):undefined;
+// A later correction can add another cable line; it must not move first completion.
+export const closedAt=(s:M.State,t:DailyTask)=>completed(s,t)?t.functions.map(w=>documents(s,t).filter(d=>d.assignment.work===w).map(d=>d.versions[0].at).sort()[0]).sort().at(-1):undefined;
 export const overdue=(s:M.State,t:DailyTask)=>!completed(s,t)&&(t.date<s.today||t.date===s.today&&s.hour>=21);
 
 // Old accounting documents and their task IDs are deliberately left byte-for-byte intact.

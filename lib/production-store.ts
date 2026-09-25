@@ -44,6 +44,11 @@ export async function mutate(input:{revision:number;requestId:string;patches:unk
   if(old.rows.length){if(old.rows[0].request_hash!==hash||old.rows[0].actor!==p.employee)throw Object.assign(Error('Повторный запрос отличается от сохранённого.'),{status:409});return row(c);}
   const current=await row(c);if(current.revision!==input.revision)throw Object.assign(Error('Данные изменились у другого сотрудника. Обновите экран и проверьте ввод.'),{status:409});
   const next=applyChanges({...current.payload,...localNow()},input.patches,p);
+  for(const n of next.summarySubscriptions||[]){
+   if(!n.enabled||JSON.stringify(n)===JSON.stringify(current.payload.summarySubscriptions?.find(x=>x.id===n.id)))continue;
+   const recipient=(await c.query('SELECT is_admin FROM operational_identities WHERE employee=$1',[n.recipient])).rows[0];
+   if(!recipient?.is_admin||!next.employees.some(e=>e.id===n.recipient&&e.active))throw Error('Получателем сводки должен быть действующий администратор с привязанным Telegram.');
+  }
   await record(c,current.payload,next,current.revision+1,input.requestId,hash,p.employee,input.patches);
   return {revision:current.revision+1,payload:next};
  });

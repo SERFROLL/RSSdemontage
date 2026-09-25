@@ -1,5 +1,6 @@
 import type {Duty,DailyTask} from './daily-work';
 import type {NotificationSettings} from './task-notifications';
+import type {SummarySubscription} from './company-notifications';
 export const REVISION = 'production-2026-09-23';
 export const STORAGE = 'rss-concise-v7';
 export const START = '2026-09-01';
@@ -31,7 +32,7 @@ export type Opening = {id:string;kind:'opening';date:string;warehouse:string;mat
 export type Adjustment = {id:string;kind:'adjustment';date:string;warehouse:string;material:string;qty:number;actor:string;reason:string;basis:string};
 export type Document = WorkDoc|Transfer|Opening|Adjustment|Exclusion;
 export type Standard = {material?:string;date:string;rate:number;norm:number[]};
-export type State = {version:7;dailyVersion?:1;duties?:Duty[];dailyTasks?:DailyTask[];pids:Pid[];replacements:Replacement[];today:string;hour:number;generated:string[];employees:Employee[];warehouses:Warehouse[];materials:Material[];assignments:Assignment[];tasks:Task[];documents:Document[];measurements:Measurement[];standards:Standard[];templates:{id:string;name:string;members:string[];warehouse?:string;active?:boolean}[]};
+export type State = {version:7;summarySubscriptions?:SummarySubscription[];dailyVersion?:1;duties?:Duty[];dailyTasks?:DailyTask[];pids:Pid[];replacements:Replacement[];today:string;hour:number;generated:string[];employees:Employee[];warehouses:Warehouse[];materials:Material[];assignments:Assignment[];tasks:Task[];documents:Document[];measurements:Measurement[];standards:Standard[];templates:{id:string;name:string;members:string[];warehouse?:string;active?:boolean}[]};
 export const n = (s:string) => /^-?\d+(?:[.,]\d+)?$/.test(s.trim()) ? Number(s.replace(',','.')) : NaN;
 export const fmt = (x:number,d=3) => (Object.is(x,-0)?0:x).toLocaleString('ru-RU',{maximumFractionDigits:d});
 export const dateLabel = (date:string) => new Date(date+'T12:00:00Z').toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
