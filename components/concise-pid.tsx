@@ -6,9 +6,44 @@ import {Choice,Field} from './review-common';
 import type {Update} from './concise-work';
 import type {DocFilter} from './concise-stats';
 import * as M from '@/lib/concise-model';
+import {pidForemen,visiblePid} from '@/lib/pid-summary';
+import {BalanceValue} from './concise-balance';
 
-export function PidProgress({s,from,to,pids,onDocs,inScope,filters}:{s:M.State;from:string;to:string;pids:string[];onDocs:(f:DocFilter)=>void;inScope?:(w:string)=>boolean;filters?:ReactNode}){
- return <section className="c-pid-progress"><div className="c-section-title"><h2>Прогресс ПИД</h2><span>на {M.dateLabel(to)}</span></div><p className="c-help">Освоено = выкопано + участки без извлечения. Доля от полной длины трассы; по выбранным складам и ответственным. Кабель отбирает ПИД, но копка относится к трассе целиком.</p>{filters}{pids.map(pid=>{const p=M.pidProgress(s,pid,from,to,inScope);return <article key={pid} className="c-pid-row"><div className="c-total-line"><h3>ПИД{pid}</h3><b>{p.percent===null?'Длина не задана':M.fmt(p.percent,1)+'%'}</b></div><div className="c-pid-track" role="img" aria-label={`ПИД${pid}: выкопано ${M.fmt(p.dig)} м, без извлечения ${M.fmt(p.excluded)} м; ${p.length?'длина '+M.fmt(p.length)+' м':'длина не задана'}`}><span className="dug" style={{width:p.length?`${Math.min(100,p.dig/p.length*100)}%`:'0%'}}/><span className="excluded" style={{width:p.length?`${Math.min(Math.max(0,100-p.dig/p.length*100),p.excluded/p.length*100)}%`:'0%'}}/></div><div className="c-total-line"><span>Освоено <b>{M.fmt(p.total)} м</b>{p.length?' из '+M.fmt(p.length)+' м':''}</span><span>За период +{M.fmt(p.period)} м</span></div><div className="c-pid-parts"><button onClick={()=>onDocs({ids:p.docs.filter(d=>d.kind==='work').map(d=>d.id),title:'ПИД'+pid+' · копка по '+M.dateLabel(to)})}><i className="dug"/>Копка <b>{M.fmt(p.dig)} м</b></button><button onClick={()=>onDocs({ids:p.docs.filter(d=>d.kind==='exclusion').map(d=>d.id),title:'ПИД'+pid+' · неизвлекаемые участки по '+M.dateLabel(to)})}><i className="excluded"/>Без извлечения <b>{M.fmt(p.excluded)} м</b></button></div>{p.percent!==null&&p.percent>100&&<p className="c-warning">Превышение длины на {M.fmt(p.total-p.length!)} м. Проверьте длину ПИД и документы.</p>}{p.length===null&&<p className="c-help">Длину вводит администратор в WEB → Настройки → ПИД и длина трассы.</p>}</article>})}{!pids.length&&<p className="c-empty">В этой области нет ПИД.</p>}<p className="c-help">Нажмите копку или участок — откроются документы. Извлечение, намотка и перемещения не меняют процент освоения.</p></section>
+export function PidProgress({s,from,to,pids,onDocs,inScope=()=>true,filters,materials=null,actor='',compact=false,withMotion=false,withStock=false}:{s:M.State;from:string;to:string;pids:string[];onDocs:(f:DocFilter)=>void;inScope?:(w:string)=>boolean;filters?:ReactNode;materials?:string[]|null;actor?:string;compact?:boolean;withMotion?:boolean;withStock?:boolean}){
+ const visible=pids.filter(pid=>visiblePid(s,pid,from,to,inScope,withMotion,withStock));
+ return <section className="c-pid-progress">
+  <div className="c-section-title"><h2>Прогресс ПИД</h2><span>на {M.dateLabel(to)}</span></div>
+  <p className="c-help">Освоено = выкопано + участки без извлечения. Доля от полной длины трассы; по выбранным складам и ответственным. Кабель отбирает ПИД, но копка относится к трассе целиком.</p>
+  {filters}
+  {(withMotion||withStock)&&<p className="c-help">Для ПИД: обороты — продвижение за период; остаток — неосвоенная длина по всему ПИД на конец периода. При двух включённых кнопках действует ИЛИ. ПИД без заданной длины и с превышением длины сохраняются при отборе по остатку.</p>}
+  {visible.map(pid=>{
+   const p=M.pidProgress(s,pid,from,to,inScope),whole=M.pidProgress(s,pid,from,to),place=M.pidCatalog(s).find(x=>x.id===pid)?.locality;
+   const foremen=pidForemen(s,pid,from,to,inScope,materials,actor);
+   return <article key={pid} className="c-pid-row">
+    <div className="c-total-line"><div><h3>ПИД{pid}</h3><p className="pid-locality">{place||'Населённый пункт не указан'}</p></div><b>{p.percent===null?'Длина не задана':M.fmt(p.percent,1)+'%'}</b></div>
+    <div className="c-pid-track" role="img" aria-label={`ПИД${pid}: выкопано ${M.fmt(p.dig)} м, без извлечения ${M.fmt(p.excluded)} м; ${p.length?'длина '+M.fmt(p.length)+' м':'длина не задана'}`}><span className="dug" style={{width:p.length?`${Math.min(100,p.dig/p.length*100)}%`:'0%'}}/><span className="excluded" style={{width:p.length?`${Math.min(Math.max(0,100-p.dig/p.length*100),p.excluded/p.length*100)}%`:'0%'}}/></div>
+    <div className="c-total-line"><span>Освоено <b>{M.fmt(p.total)} м</b>{p.length?' из '+M.fmt(p.length)+' м':''}</span><span>За период +{M.fmt(p.period)} м</span></div>
+    <div className="c-pid-parts"><button onClick={()=>onDocs({ids:p.docs.filter(d=>d.kind==='work').map(d=>d.id),title:'ПИД'+pid+' · копка по '+M.dateLabel(to)})}><i className="dug"/>Копка <b>{M.fmt(p.dig)} м</b></button><button onClick={()=>onDocs({ids:p.docs.filter(d=>d.kind==='exclusion').map(d=>d.id),title:'ПИД'+pid+' · неизвлекаемые участки по '+M.dateLabel(to)})}><i className="excluded"/>Без извлечения <b>{M.fmt(p.excluded)} м</b></button></div>
+    <section className={'pid-foremen'+(compact?' compact':'')} aria-label={'Прорабы ПИД'+pid}>
+     <p className="pid-period">Копка, извлечение и отправка: {M.dateLabel(from)} — {M.dateLabel(to)}. На ПИД: остаток на {M.dateLabel(to)}.</p>
+     <div className="pid-foreman-head" aria-hidden="true"><span>Прораб</span><span>Копка, км</span><span>Извлечено, т</span><span>Отправлено, т</span><span>На ПИД, т</span></div>
+     {foremen.map(row=><div className="pid-foreman" key={row.employee}>
+      <b className="pid-foreman-name">{M.person(s,row.employee)}</b>
+      <div className="pid-metric"><span>Копка, км</span><button className="c-number-link" aria-label={M.person(s,row.employee)+' · копка за период: '+M.fmt(row.dig)+' м'} onClick={()=>onDocs({ids:row.digIds,title:'ПИД'+pid+' · '+M.person(s,row.employee)+' · копка '+M.dateLabel(from)+' — '+M.dateLabel(to)+' · '+M.fmt(row.dig)+' м'})}>{M.fmt(row.dig/1000,3)}</button></div>
+      <div className="pid-metric"><span>Извлечено, т</span><BalanceValue s={s} query={row.extracted} onDocs={onDocs} decimals={compact?1:3}/></div>
+      <div className="pid-metric"><span>Отправлено, т</span><BalanceValue s={s} query={row.sent} onDocs={onDocs} decimals={compact?1:3}/></div>
+      <div className="pid-metric ending"><span>На ПИД, т</span><BalanceValue s={s} query={row.stock} onDocs={onDocs} decimals={compact?1:3}/></div>
+     </div>)}
+     {!foremen.length&&<p className="c-help">Прорабы в выбранной области не назначены.</p>}
+     <p className="c-help">{materials===null?'Все марки кабеля суммарно.':'Выбранные марки кабеля суммарно.'} Остаток включает начальные остатки и все движения до конца периода. Отправленный кабель в пути сюда не входит.</p>
+    </section>
+    {whole.percent!==null&&whole.percent>100&&<p className="c-warning">По всему ПИД превышение длины на {M.fmt(whole.total-whole.length!)} м. Проверьте длину ПИД и документы.</p>}
+    {p.length===null&&<p className="c-help">Длину вводит администратор в WEB → Настройки → ПИД и длина трассы.</p>}
+   </article>;
+  })}
+  {!visible.length&&<p className="c-empty">{pids.length?'Нет ПИД по условиям оборота и остатка.':'В этой области нет ПИД.'}</p>}
+  <p className="c-help">Нажмите показатель — откроются документы его расчёта. Извлечение, намотка и перемещения не меняют процент освоения.</p>
+ </section>;
 }
 
 export function ExclusionForm({s,actor,update,doc,onSaved}:{s:M.State;actor:string;update:Update;doc?:M.Exclusion;onSaved?:()=>void}){

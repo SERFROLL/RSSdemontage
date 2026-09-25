@@ -71,3 +71,11 @@
 .stats-periods .periods{max-width:650px}
 @media(max-width:700px){.stats-filter-row{grid-template-columns:1fr;gap:7px}.stats-chips button{min-height:42px}.stats-mobile-bar .form-field select{font-size:16px}.c-review .stats-mobile-bar>.c-segments button{padding-inline:7px}}
 .daily-filters{border:1px solid #dce5e7;border-radius:10px;padding:12px}.daily-filters>summary{cursor:pointer;font-size:14px;color:#4e666e}.daily-filters .settings-toolbar{margin-top:12px}.daily-form .c-person-row input{width:72px;border:1px solid #d1dee1;border-radius:8px;padding:8px;background:white;font:inherit}
+
+/* PID: responsible foremen and period output, separate from closing field stock. */
+.pid-locality{margin:3px 0 0;color:#546f76;font-size:14px}.pid-period{font-size:12px;color:#546f76;line-height:1.5;margin:12px 0}
+.pid-foreman-head,.pid-foreman{display:grid;grid-template-columns:minmax(220px,2fr) repeat(4,minmax(95px,1fr));gap:10px;align-items:center}
+.pid-foreman-head{font-size:12px;color:#546f76;padding:8px 0;border-bottom:1px solid #dce8e4}.pid-foreman{padding:12px 0;border-bottom:1px solid #e6edeb;font-size:14px}
+.pid-foreman-head>span:not(:first-child),.pid-metric{text-align:right}.pid-foreman-name{overflow-wrap:anywhere}.pid-metric{min-width:0;font-variant-numeric:tabular-nums}.pid-metric>span{display:none}.pid-metric .c-number-link{font-size:16px;white-space:nowrap;min-height:34px}.pid-metric.ending{color:#176d64}
+.pid-foremen.compact .pid-foreman-head{display:none}.pid-foremen.compact .pid-foreman{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.pid-foremen.compact .pid-foreman-name{grid-column:1/-1;margin-bottom:6px}.pid-foremen.compact .pid-metric>span{display:block;min-height:30px;font-size:10px;line-height:1.5;color:#546f76}.pid-foremen.compact .pid-metric{text-align:center}.pid-foremen.compact .pid-metric .c-number-link{font-size:14px;max-width:100%;overflow-x:auto}
+@media(max-width:850px){.pid-foreman-head{display:none}.pid-foreman{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.pid-foreman-name{grid-column:1/-1}.pid-metric>span{display:block;min-height:30px;font-size:11px;color:#546f76}.pid-metric{text-align:center}.pid-metric .c-number-link{font-size:14px;max-width:100%;overflow-x:auto}}

@@ -5,7 +5,7 @@ import {Input} from './ui/input';
 import {Textarea} from './ui/textarea';
 import {Choice,Field} from './review-common';
 import {transferCoils} from '@/lib/concise-coils';
-import {balanceCell,balanceDateLabel,balanceScopeLabel,balanceFormat,balanceUnit,columnLabels,type BalanceQuery} from '@/lib/concise-balance';
+import {balanceCell,balanceMaterialLabel,balanceColumnLabel,balanceDateLabel,balanceScopeLabel,balanceFormat,balanceUnit,columnLabels,type BalanceQuery} from '@/lib/concise-balance';
 import {ExclusionForm} from './concise-pid';
 import {DayCard,Update} from './concise-work';
 import type {DocFilter} from './concise-stats';
@@ -54,9 +54,9 @@ function BalanceDocuments({s,query,onDocument}:{s:M.State;query:BalanceQuery;onD
  const result=balanceCell(s,query),unit=balanceUnit(query);
  return <div className="c-form">
   <section className="c-card" aria-label="Расшифровка показателя">
-   <p>{balanceScopeLabel(s,query)} · {M.material(s,query.material)}{query.unit==='coils'?' · катушки':''}</p>
+   <p>{balanceScopeLabel(s,query)} · {balanceMaterialLabel(s,query)}{query.unit==='coils'?' · катушки':''}</p>
    <p className="c-help">{balanceDateLabel(query)}</p>
-   <div className="c-total-line"><span>{columnLabels[query.column]} · сумма документов</span><b>{balanceFormat(result.value,query)} {unit}</b></div>
+   <div className="c-total-line"><span>{balanceColumnLabel(query)} · сумма документов</span><b>{balanceFormat(result.value,query)} {unit}</b></div>
    <p className="c-help">{query.column==='minus'?'Вклад каждого документа показан как количество расхода.':'Знак у документа показывает его вклад в выбранную цифру.'} Учтены действующие версии и даты движений. Документы с нулевым вкладом исключены.</p>
   </section>
   <p className="c-help">Документов в расчёте: {result.contributions.length}</p>
