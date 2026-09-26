@@ -5,6 +5,7 @@ const origin=new URL(process.env.MINI_APP_URL);if(origin.protocol!=="https:")thr
 async function call(method,body){try{const r=await fetch("https://api.telegram.org/bot"+process.env.TELEGRAM_BOT_TOKEN+"/"+method,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();if(!d.ok)throw new Error();return d.result;}catch{throw new Error("Telegram setup failed at "+method+"; no credentials logged");}}
 const info=await call("getWebhookInfo",{});
 if(info.url&&info.url!==new URL("/api/telegram",origin).href)throw new Error("Another webhook exists. Inspect before changing it.");
-await call("setWebhook",{url:new URL("/api/telegram",origin).href,secret_token:process.env.TELEGRAM_WEBHOOK_SECRET,allowed_updates:["message"],drop_pending_updates:false});
-await call("setChatMenuButton",{menu_button:{type:"web_app",text:"Открыть учёт",web_app:{url:origin.href}}});
+await call("setWebhook",{url:new URL("/api/telegram",origin).href,secret_token:process.env.TELEGRAM_WEBHOOK_SECRET,allowed_updates:["message","callback_query"],drop_pending_updates:false});
+await call("setMyCommands",{commands:[{command:"access",description:"Запросить доступ"}]});
+await call("setChatMenuButton",{menu_button:{type:"commands"}});
 console.log("Webhook and Mini App menu configured. No messages sent.");

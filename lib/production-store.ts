@@ -37,6 +37,7 @@ export async function ensureTasks(){return transaction(async c=>{
  return {...current,payload:s};
 });}
 export async function mutate(input:{revision:number;requestId:string;patches:unknown},p:Principal){
+ if(p.observer)throw Object.assign(Error('Наблюдателю доступен только просмотр статистики.'),{status:403});
  if(!Number.isInteger(input.revision)||!/^[-a-zA-Z0-9:]{10,160}$/.test(input.requestId))throw Error('Некорректный запрос.');
  const hash=digest(JSON.stringify({patches:input.patches,actor:p.employee}));
  return transaction(async c=>{

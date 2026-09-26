@@ -79,3 +79,20 @@
 .pid-foreman-head>span:not(:first-child),.pid-metric{text-align:right}.pid-foreman-name{overflow-wrap:anywhere}.pid-metric{min-width:0;font-variant-numeric:tabular-nums}.pid-metric>span{display:none}.pid-metric .c-number-link{font-size:16px;white-space:nowrap;min-height:34px}.pid-metric.ending{color:#176d64}
 .pid-foremen.compact .pid-foreman-head{display:none}.pid-foremen.compact .pid-foreman{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}.pid-foremen.compact .pid-foreman-name{grid-column:1/-1;margin-bottom:6px}.pid-foremen.compact .pid-metric>span{display:block;min-height:30px;font-size:10px;line-height:1.5;color:#546f76}.pid-foremen.compact .pid-metric{text-align:center}.pid-foremen.compact .pid-metric .c-number-link{font-size:14px;max-width:100%;overflow-x:auto}
 @media(max-width:850px){.pid-foreman-head{display:none}.pid-foreman{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.pid-foreman-name{grid-column:1/-1}.pid-metric>span{display:block;min-height:30px;font-size:11px;color:#546f76}.pid-metric{text-align:center}.pid-metric .c-number-link{font-size:14px;max-width:100%;overflow-x:auto}}
+/* Compact TG header and stable balance geometry. Values remain exact in documents. */
+.production.tg .c-compact-header{padding:10px 14px;gap:10px;min-height:60px}
+.production.tg .c-compact-header>div{min-width:0;flex:1}
+.production.tg .c-compact-header>div>b{font-size:16px;line-height:1.3;overflow-wrap:normal}
+.production .c-domain-login{flex:0 0 auto;display:flex;align-items:baseline;gap:6px;padding:10px 12px;background:#e3f1ee;color:#086d66;border:1px solid #badbd5;border-radius:10px;white-space:nowrap;min-height:42px}
+.production .c-domain-login b{font-size:17px;letter-spacing:-.3px}.production .c-domain-login small{font-size:11px}
+.c-login-steps{padding-left:22px;display:grid;gap:9px;font-size:14px;line-height:1.5}
+.c-legend{font-size:13px;color:#536977;line-height:1.5}.c-legend>summary{cursor:pointer;color:#18776f;text-decoration:underline;text-underline-offset:3px;min-height:36px;display:flex;align-items:center;gap:6px}.c-legend>summary::before{content:'▸';text-decoration:none}.c-legend[open]>summary::before{content:'▾'}.c-legend p{margin-top:9px}
+.c-review .c-number-link:disabled,.c-review .c-pid-parts button:disabled{opacity:1;color:inherit;text-decoration:none;cursor:default}
+.c-review.tg .c-table.balance{table-layout:fixed;width:100%;min-width:0;font-size:13px}
+.c-review.tg .c-table.balance col.balance-name{width:28%}.c-review.tg .c-table.balance col.balance-number{width:18%}
+.c-review.tg .c-table.balance th,.c-review.tg .c-table.balance td{padding:12px 3px;vertical-align:middle;overflow-wrap:normal}
+.c-review.tg .c-table.balance th:not(:first-child),.c-review.tg .c-table.balance td{text-align:center;font-variant-numeric:tabular-nums}
+.c-review.tg .c-table.balance th:first-child{padding-left:7px;font-size:12px;white-space:normal;word-break:normal}
+.c-review.tg .c-table.balance .c-number-link{font-size:13px;letter-spacing:-.2px;white-space:nowrap;min-height:38px;max-width:none;padding:0}
+.c-cable-name{display:block}.c-cable-name>span{display:block;white-space:nowrap;line-height:1.5}
+@media(max-width:360px){.production.tg .c-app-content{padding:14px 10px 100px}.c-review.tg .c-balance{padding:10px}.c-review.tg .c-table.balance,.c-review.tg .c-table.balance .c-number-link{font-size:12px}.c-review.tg .c-table.balance th:first-child{font-size:11px;padding-left:5px}.production .c-domain-login{padding:9px}.production .c-domain-login b{font-size:16px}.production.tg .c-compact-header>div>b{font-size:15px}}

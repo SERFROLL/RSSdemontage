@@ -4,7 +4,7 @@ import {summarySubscriptions,summaryNames,periodNames} from './company-notificat
 export type Section='pid'|'trust'|'functions'|'staff'|'crew'|'warehouses'|'materials'|'mass'|'norms'|'opening'|'access'|'notifications'|'summaries';
 export type Filter={query:string;values:Record<string,string>;page:number};
 export type Row={id:string;values:Record<string,string>;search:string};
-export type Identity={employee:string;telegram_id:string;is_admin:boolean};
+export type Identity={employee:string;telegram_id:string;is_admin:boolean;is_observer?:boolean};
 export const sections:{id:Section;name:string;fields:[string,string][];primary?:number}[]=[
  {id:'pid',name:'ПИД и длина трассы',primary:3,fields:[['pid','ПИД'],['pidStatus','Статус ПИД'],['locality','Населённый пункт'],['length','Длина']]},
  {id:'trust',name:'Доверенные лица',fields:[['deputy','Доверенное лицо'],['warehouse','Склад / ПИД'],['owner','МОЛ'],['pid','ПИД'],['pidStatus','Статус ПИД'],['locality','Населённый пункт'],['status','Доступ']]},
@@ -39,6 +39,6 @@ export function settingsRows(s:M.State,section:Section,identities:Identity[]=[])
  case 'mass':return s.measurements.map(m=>row(m.id,{...pid(m.pid),material:M.material(s,m.material||''),author:M.person(s,m.author),date:m.date},String(M.measurementGrams(m))));
  case 'norms':return s.standards.map(m=>row(m.material+'|'+m.date,{material:M.material(s,m.material||''),date:m.date},String(m.rate)));
  case 'opening':return s.documents.filter((d):d is M.Opening=>d.kind==='opening').map(d=>row(d.id,{...wh(d.warehouse),material:M.material(s,d.material),date:d.date},String(d.qty)));
- case 'access':return identities.map(i=>row(i.employee,{employee:M.person(s,i.employee),rights:i.is_admin?'Администратор':'По назначениям',status:s.employees.find(e=>e.id===i.employee)?.active?'Да':'Нет'},i.telegram_id));
+ case 'access':return identities.map(i=>row(i.employee,{employee:M.person(s,i.employee),rights:i.is_admin?'Администратор':i.is_observer?'Наблюдатель':'По назначениям',status:s.employees.find(e=>e.id===i.employee)?.active?'Да':'Нет'},i.telegram_id));
  }
 }

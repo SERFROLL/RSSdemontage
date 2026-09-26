@@ -25,7 +25,7 @@ const schemas={
  standards:z.object({material:id,date,rate:number.positive(),norm:z.array(number.max(100)).length(3)}).strict(),
 };
 type Catalog=keyof typeof schemas;
-export type Principal={employee:string;admin:boolean};
+export type Principal={employee:string;admin:boolean;observer?:boolean};
 export type Patch={key:string;rows:unknown[]};
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 const keyFor=(key:string,row:Record<string,unknown>)=>key==='replacements'?`${row.warehouse}|${row.deputy}`:key==='standards'?`${row.material}|${row.date}`:String(row.id);
@@ -60,6 +60,7 @@ export function validateReferences(s:M.State){
 // The browser proposes edited fields. No client balances, permissions, frozen rates,
 // authors, timestamps or task snapshots are accepted as authoritative.
 export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
+ if(p.observer)throw Object.assign(Error('Наблюдателю доступен только просмотр статистики.'),{status:403});
  const patches=z.array(z.object({key:z.string(),rows:z.array(z.unknown()).min(1).max(200)}).strict()).min(1).max(2).parse(input);
  if(new Set(patches.map(x=>x.key)).size!==patches.length)fail('Повтор раздела в запросе.');
  let s=structuredClone(state);const actor=p.admin?'admin':p.employee;

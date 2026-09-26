@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 const out='outputs/operational-test';mkdirSync(out,{recursive:true});
-for(const name of ['pid-summary','stats-filters','bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
+for(const name of ['observer-access','observer-state','operational-bot','pid-summary','stats-filters','bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
  const code=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from (['"])\.\/([a-z-]+)\1/g,'from "./$2.mjs"');writeFileSync(`${out}/${name}.mjs`,code);
 }
 writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV; export const database=()=>runtime().DB; export const readDocs=()=>{throw Error("Not used")}; export const saveDoc=readDocs; export const hash=readDocs;');
@@ -15,6 +15,7 @@ let s={version:7,today,hour:10,generated:[],employees:[{id:'a',name:'МОЛ А',
 const legacyFixture=structuredClone(s);
 const a={employee:'a',admin:false},helper={employee:'helper',admin:false},b={employee:'b',admin:false},boss={employee:'boss',admin:true};
 const F=await import(`../${out}/settings-filters.mjs`),P=await import(`../${out}/pid-metadata.mjs`);
+check('Наблюдатель не меняет документы, настройки и своё задание даже с флагом admin',()=>{for(const principal of [{...a,observer:true},{...boss,observer:true}])for(const patches of [[],[{key:'employees',rows:[{id:'a',name:'Новое имя',active:true}]}],[{key:'documents',rows:[]}]])assert.throws(()=>D.applyChanges(s,patches,principal),/статистик/);});
 check('Метаданные ПИД не меняют длины, документы, задания и матрицу',()=>{const next=P.applyPidMetadata(s,[{id:'101',locality:'Город',status:'planned'}]);assert.equal(next.pids[0].lengthM,10000);assert.equal(next.pids[0].locality,'Город');for(const key of Object.keys(s).filter(k=>k!=='pids'))assert.deepEqual(next[key],s[key]);assert.deepEqual(M.generate(next,today,10).tasks,M.generate(s,today,10).tasks);const edited=D.applyChanges(next,[{key:'pids',rows:[{id:'101',lengthM:11000}]}],boss);assert.equal(edited.pids[0].status,'planned');assert.equal(edited.pids[0].locality,'Город');});
 check('Неизвестный ПИД и дубликаты отвергаются до импорта',()=>{assert.throws(()=>P.applyPidMetadata(s,[{id:'unknown',locality:'Город',status:'active'}]),/не найден/);assert.throws(()=>P.applyPidMetadata(s,[{id:'101',locality:'Город',status:'active'},{id:'101',locality:'Город',status:'planned'}]),/повторяется/);});
 check('Отборы функций используют МОЛ склада и признаки ПИД',()=>{const state=P.applyPidMetadata(s,[{id:'101',locality:'Город',status:'active'}]);const rows=F.settingsRows(state,'functions'),f={query:'',values:{owner:'МОЛ А',locality:'Город',pidStatus:'В работе'},page:0};assert.equal(rows.filter(r=>F.matches(r,f)).length,3);assert.equal(rows.filter(r=>F.matches(r,{...f,query:'нет такого'})).length,0);assert.equal(F.settingsRows(s,'pid')[0].values.pidStatus,'Не указано');});
@@ -42,6 +43,8 @@ check('Отправитель не принимает за получателя'
 s=D.applyChanges(s,D.changes(s,received),b);
 check('Приёмка оставляет расхождение отдельно',()=>{assert.equal(M.stock(s,'main','c'),1.59);assert.equal(M.stock(s,'transit','c'),.01)});
 check('Все ячейки баланса раскрываются в точную сумму',()=>{for(const scope of ['all','a101','main'])for(const column of ['before','plus','minus','after']){const r=B.balanceCell(s,{scope,actor:'a',material:'c',column,from:today,to:today,unit:'tonnes'});assert.equal(M.round(r.contributions.reduce((a,c)=>a+c.quantity,0)),r.value)}});
+const OS=await import(`../${out}/observer-state.mjs`);
+check('Наблюдатель получает те же числа без текста и истории документов',()=>{const view=OS.observerState(s);for(const scope of ['all','a101','main'])for(const unit of ['tonnes','coils'])for(const column of ['before','plus','minus','after']){const q={scope,actor:'a',material:'c',column,from:today,to:today,unit};assert.equal(B.balanceCell(view,q).value,B.balanceCell(s,q).value);}assert.deepEqual(M.pidProgress(view,'101',today,today).total,M.pidProgress(s,'101',today,today).total);const raw=JSON.stringify(view.documents);assert.ok(!raw.includes('Разница взвешивания'));assert.ok(!raw.includes('"actor":"helper"'));assert.equal(view.measurements.length,0);assert.equal(view.standards.length,0);assert.equal(view.templates.length,0);assert.equal(view.documents.length,s.documents.length);});
 const SF=await import(`../${out}/stats-filters.mjs`);
 check('Область Я доступна МОЛ и доверенному, но не администратору без функций',()=>{assert.deepEqual(SF.personalWarehouses(s,'boss'),[]);assert.deepEqual(SF.personalWarehouses(s,'helper'),['a101']);assert.ok(SF.personalWarehouses(s,'a').includes('a101'));assert.equal(B.inBalanceScope(s,'mine','boss','a101'),false);});
 check('Склад сотрудника и ПИД пересекаются без аналитики ПИД на общем складе',()=>{const q={scope:'owners',owners:['a','b'],pids:['101'],actor:'boss',material:'c',unit:'tonnes',from:today,to:today,column:'after'};assert.equal(B.inBalanceQuery(s,q,'a101'),true);assert.equal(B.inBalanceQuery(s,q,'main'),false);assert.equal(B.inBalanceQuery(s,q,'transit'),false);assert.equal(B.balanceCell(s,q).value,1.776);assert.equal(B.balanceCell(s,{...q,owners:['b']}).value,0);assert.equal(B.balanceCell(s,{...q,owners:[]}).value,0);});
@@ -227,6 +230,38 @@ if(process.env.TEST_DATABASE_URL){
   const params=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:123456789})});const key=createHmac('sha256','WebAppData').update('test-token').digest();params.set('hash',createHmac('sha256',key).update([...params].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n')).digest('hex'));
   const tgRequest=new Request('https://example.test',{headers:{'x-telegram-init-data':params.toString()}});await A.approveLogin(tgRequest,login.code);
   const approved=await A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})),sessionCookie=approved.headers.get('set-cookie').split(';')[0];assert.equal((await A.authenticate(new Request('https://example.test',{headers:{cookie:sessionCookie}}))).employee,'a');await assert.rejects(A.finishLogin(new Request('https://example.test',{headers:{cookie:loginCookie}})));checks++;console.log('PASS Telegram signed approval, cookie session and one-time exchange');
+  const O=await import('../'+out+'/observer-access.mjs');
+  const beforeObservers=await S.row();
+  assert.equal((await O.accessStatus('555000111')).status,'new');
+  await assert.rejects(O.requestAccess({id:555000111},'Однослово'),/имя и фамилию/);
+  const requested=await O.requestAccess({id:555000111,first_name:'Иван',last_name:'Тестов'},'Иван Тестов');
+  assert.equal(requested.status,'pending');assert.equal((await O.requestAccess({id:555000111},'Другое Имя')).id,requested.id);
+  await assert.rejects(O.decideAccess(requested.id,'approve',a),/администратора/);
+  await O.decideAccess(requested.id,'approve',boss);
+  const member=await O.accessMember('555000111');assert.equal(member.is_observer,true);assert.equal(member.is_admin,false);
+  await assert.rejects(O.decideAccess(requested.id,'approve',boss),/рассмотрена/);
+  const viewerParams=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:555000111})});
+  viewerParams.set('hash',createHmac('sha256',key).update([...viewerParams].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>k+'='+v).join('\n')).digest('hex'));
+  const viewerRequest=new Request('https://example.test',{headers:{'x-telegram-init-data':viewerParams.toString()}}),viewer=await A.authenticate(viewerRequest);
+  assert.equal(viewer.observer,true);assert.equal(viewer.admin,false);
+  await assert.rejects(S.mutate(request,viewer),/статистик/); // Cannot replay administrator's successful request either.
+  const startViewer=await A.beginLogin(new Request('https://example.test/api/operational/auth')),viewerLogin=await startViewer.json();
+  await A.approveLogin(viewerRequest,viewerLogin.code);
+  const viewerSession=await A.finishLogin(new Request('https://example.test',{headers:{cookie:startViewer.headers.get('set-cookie').split(';')[0]}}));
+  assert.equal((await A.authenticate(new Request('https://example.test',{headers:{cookie:viewerSession.headers.get('set-cookie').split(';')[0]}}))).observer,true);
+  assert.deepEqual((await S.row()).payload.documents,beforeObservers.payload.documents);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,initialCount);
+  assert.equal((await A.authenticate(tgRequest)).observer,false);
+  const rejected=await O.requestAccess({id:555000222},'Пётр Тестов');await O.decideAccess(rejected.id,'reject',boss);
+  assert.equal((await O.accessStatus('555000222')).status,'rejected');assert.equal(await O.accessMember('555000222'),null);
+  const retryRequest=await O.requestAccess({id:555000222},'Пётр Тестов');assert.notEqual(retryRequest.id,rejected.id);
+  await assert.rejects(O.decideAccess(retryRequest.id,'approve',boss,'a'),/уже имеет Telegram/);
+  await S.mutate({revision:(await S.row()).revision,requestId:'new-unlinked-employee',patches:[{key:'employees',rows:[{id:'unlinked',name:'Пётр Тестов',active:true}]}]},boss);
+  await assert.rejects(O.decideAccess(retryRequest.id,'approve',boss),/Такое имя уже есть/);
+  await O.decideAccess(retryRequest.id,'approve',boss,'unlinked');assert.equal((await O.accessMember('555000222')).employee,'unlinked');
+  await S.mutate({revision:(await S.row()).revision,requestId:'disable-observer-test',patches:[{key:'employees',rows:[{id:'unlinked',name:'Пётр Тестов',active:false}]}]},boss);
+  assert.equal((await O.accessStatus('555000222')).status,'disabled');await assert.rejects(O.requestAccess({id:555000222},'Другое Имя'),/уже назначен/);
+  checks++;console.log('PASS PostgreSQL observer request, approval, rejection, linking, TG/WEB read-only and unchanged ledger');
   assert.equal((await pool.query('SELECT material,unit,SUM(quantity) FROM operational_postings GROUP BY material,unit HAVING SUM(quantity)<>0')).rows.length,0);checks++;console.log('PASS PostgreSQL journal balances');
   await root.query('CREATE SCHEMA IF NOT EXISTS daily_test');const dailyPool=new pg.Pool({connectionString:url.href,options:'-c search_path=daily_test'});
   try{await migrate(dailyPool);globalThis.OPERATIONAL_TEST_ENV={pool:dailyPool,TELEGRAM_BOT_TOKEN:'test-token'};
