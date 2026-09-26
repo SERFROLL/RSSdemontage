@@ -36,6 +36,7 @@ export async function requestAccess(user:{id:number;first_name?:string;last_name
  return {status:result.status,id:result.id,name:result.name};
 }
 async function notifyAccessAdmins(request:any){
+ if(runtime().APP_MODE!=='production')return;
  const s=(await row()).payload,admins=(await pool().query('SELECT employee,telegram_id FROM operational_identities WHERE is_admin=true')).rows.filter((i:any)=>s.employees.some(e=>e.id===i.employee&&e.active));
  for(const a of admins)await sendAccessOnce('access-request:'+request.id+':'+a.employee,a.telegram_id,`Запрос доступа\n${request.name}${request.username?' · @'+request.username:''}\nТолько просмотр статистики компании в TG и на сайте.`,{inline_keyboard:[[{text:'Разрешить просмотр',callback_data:'access:approve:'+request.id},{text:'Отклонить',callback_data:'access:reject:'+request.id}]]});
 }
@@ -63,7 +64,7 @@ export async function decideAccess(id:string,decision:'approve'|'reject',princip
   return {...r,status:decision==='approve'?'approved':'rejected',employee:linked};
  });
  await syncAccessMenu(result.telegram_id,result.status==='approved');
- await sendAccessOnce('access-result:'+id,result.telegram_id,result.status==='approved'?'Вам предоставлен доступ к просмотру статистики компании.':'Запрос доступа отклонён администратором.',result.status==='approved'?openAccountMarkup():undefined);
+ if(runtime().APP_MODE==='production')await sendAccessOnce('access-result:'+id,result.telegram_id,result.status==='approved'?'Вам предоставлен доступ к просмотру статистики компании.':'Запрос доступа отклонён администратором.',result.status==='approved'?openAccountMarkup():undefined);
  return {ok:true};
 }
 export const openAccountMarkup=()=>({inline_keyboard:[[{text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}]]});
