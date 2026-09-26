@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {pool,row,transaction,record,digest} from './production-store';
-import {telegram,sendOnce} from './bot';
+import {telegramAccess,sendAccessOnce} from './bot';
 import {runtime} from './store';
 import type {Principal} from './production-domain';
 
@@ -36,9 +36,8 @@ export async function requestAccess(user:{id:number;first_name?:string;last_name
  return {status:result.status,id:result.id,name:result.name};
 }
 async function notifyAccessAdmins(request:any){
- if(runtime().BOT_ENABLED!=='true')return;
  const s=(await row()).payload,admins=(await pool().query('SELECT employee,telegram_id FROM operational_identities WHERE is_admin=true')).rows.filter((i:any)=>s.employees.some(e=>e.id===i.employee&&e.active));
- for(const a of admins)await sendOnce('access-request:'+request.id+':'+a.employee,a.telegram_id,`Запрос доступа\n${request.name}${request.username?' · @'+request.username:''}\nТолько просмотр статистики компании в TG и на сайте.`,{inline_keyboard:[[{text:'Разрешить просмотр',callback_data:'access:approve:'+request.id},{text:'Отклонить',callback_data:'access:reject:'+request.id}]]});
+ for(const a of admins)await sendAccessOnce('access-request:'+request.id+':'+a.employee,a.telegram_id,`Запрос доступа\n${request.name}${request.username?' · @'+request.username:''}\nТолько просмотр статистики компании в TG и на сайте.`,{inline_keyboard:[[{text:'Разрешить просмотр',callback_data:'access:approve:'+request.id},{text:'Отклонить',callback_data:'access:reject:'+request.id}]]});
 }
 export async function decideAccess(id:string,decision:'approve'|'reject',principal:Principal,employee?:string){
  if(!principal.admin||principal.observer)throw Object.assign(Error('Требуются права администратора.'),{status:403});
@@ -64,12 +63,12 @@ export async function decideAccess(id:string,decision:'approve'|'reject',princip
   return {...r,status:decision==='approve'?'approved':'rejected',employee:linked};
  });
  await syncAccessMenu(result.telegram_id,result.status==='approved');
- if(runtime().BOT_ENABLED==='true')await sendOnce('access-result:'+id,result.telegram_id,result.status==='approved'?'Вам предоставлен доступ к просмотру статистики компании.':'Запрос доступа отклонён администратором.',result.status==='approved'?openAccountMarkup():undefined);
+ await sendAccessOnce('access-result:'+id,result.telegram_id,result.status==='approved'?'Вам предоставлен доступ к просмотру статистики компании.':'Запрос доступа отклонён администратором.',result.status==='approved'?openAccountMarkup():undefined);
  return {ok:true};
 }
 export const openAccountMarkup=()=>({inline_keyboard:[[{text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}]]});
 export async function syncAccessMenu(chatId:string,allowed:boolean){
- try{await telegram('setChatMenuButton',{chat_id:chatId,menu_button:allowed?{type:'web_app',text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}:{type:'commands'}});if(!allowed)await telegram('setMyCommands',{scope:{type:'chat',chat_id:chatId},commands:[{command:'access',description:'Запросить доступ'}]});}catch{/* Access persists even when Telegram is unavailable. */}
+ try{await telegramAccess('setChatMenuButton',{chat_id:chatId,menu_button:allowed?{type:'web_app',text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}:{type:'commands'}});if(!allowed)await telegramAccess('setMyCommands',{scope:{type:'chat',chat_id:chatId},commands:[{command:'access',description:'Запросить доступ'}]});}catch{/* Access persists even when Telegram is unavailable. */}
 }
 
 let menuReady=false,menuAttempt=0;
@@ -77,12 +76,12 @@ export async function configureAccessBot(){
  if(menuReady||Date.now()-menuAttempt<600000)return;
  menuAttempt=Date.now();
  try{
-  const e=runtime(),info=await telegram('getWebhookInfo',{});
+  const e=runtime(),info=await telegramAccess('getWebhookInfo',{});
   const expected=new URL('/api/telegram',e.MINI_APP_URL).href;
-  if(info.url!==expected||!e.TELEGRAM_WEBHOOK_SECRET)return;
-  await telegram('setWebhook',{url:expected,secret_token:e.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message','callback_query'],drop_pending_updates:false});
-  await telegram('setMyCommands',{commands:[{command:'access',description:'Запросить доступ'}]});
-  await telegram('setChatMenuButton',{menu_button:{type:'commands'}});
+  if((info.url&&info.url!==expected)||!e.TELEGRAM_WEBHOOK_SECRET)return;
+  await telegramAccess('setWebhook',{url:expected,secret_token:e.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message','callback_query'],drop_pending_updates:false});
+  await telegramAccess('setMyCommands',{commands:[{command:'access',description:'Запросить доступ'}]});
+  await telegramAccess('setChatMenuButton',{menu_button:{type:'commands'}});
   const s=(await row()).payload;
   for(const i of (await pool().query('SELECT employee,telegram_id FROM operational_identities')).rows)await syncAccessMenu(i.telegram_id,s.employees.some(e=>e.id===i.employee&&e.active));
   menuReady=true;

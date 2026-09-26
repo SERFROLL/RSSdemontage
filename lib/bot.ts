@@ -17,18 +17,22 @@ export function dailyText(docs:Doc[],date:string){
  if(changed.length)text.push("Изменено записей: "+changed.length+". История доступна в приложении.");
  return text.join("\n");
 }
-export async function telegram(method:string,body:any){
- const e=runtime();must(e.APP_MODE==="production"&&e.BOT_ENABLED==="true","Отправка сообщений на стенде отключена",503);must(e.TELEGRAM_BOT_TOKEN,"Бот не настроен",503);
+async function telegramCall(method:string,body:any,accessOnly:boolean){
+ const e=runtime();must(e.APP_MODE==="production"&&(accessOnly||e.BOT_ENABLED==="true"),"Отправка сообщений на стенде отключена",503);must(e.TELEGRAM_BOT_TOKEN,"Бот не настроен",503);
  // Never log URLs or exceptions: the Bot API places the credential in its URL.
  let response:Response;try{response=await fetch("https://api.telegram.org/bot"+e.TELEGRAM_BOT_TOKEN+"/"+method,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});}catch{throw new DomainError("Не удалось подтвердить отправку сообщения",503);}
  const r:any=await response.json();if(!r.ok)throw new DomainError("Telegram отклонил отправку",502);return r.result;
 }
-export async function sendOnce(key:string,chatId:string,text:string,markup?:any){
+export const telegram=(method:string,body:any)=>telegramCall(method,body,false);
+export const telegramAccess=(method:string,body:any)=>telegramCall(method,body,true);
+async function sendClaimed(key:string,chatId:string,text:string,markup:any,send:typeof telegram){
  const db=database(),now=new Date().toISOString();
  const claim=await db.prepare("INSERT OR IGNORE INTO notifications (key,status,chat_id,created_at) VALUES (?,'sending',?,?) RETURNING key").bind(key,chatId,now).first();if(!claim)return false;
- try{const r=await telegram("sendMessage",{chat_id:chatId,text,reply_markup:markup});await db.prepare("UPDATE notifications SET status='sent',message_id=? WHERE key=?").bind(String(r.message_id),key).run();return true;}
+ try{const r=await send("sendMessage",{chat_id:chatId,text,reply_markup:markup});await db.prepare("UPDATE notifications SET status='sent',message_id=? WHERE key=?").bind(String(r.message_id),key).run();return true;}
  catch{await db.prepare("UPDATE notifications SET status='uncertain',error=? WHERE key=?").bind("Требуется проверка доставки; автоматический повтор отключён",key).run();return false;}
 }
+export const sendOnce=(key:string,chatId:string,text:string,markup?:any)=>sendClaimed(key,chatId,text,markup,telegram);
+export const sendAccessOnce=(key:string,chatId:string,text:string,markup?:any)=>sendClaimed(key,chatId,text,markup,telegramAccess);
 export function miniUrl(env:any,pid?:string,category?:string,date?:string){const u=new URL(env.MINI_APP_URL);if(pid)u.searchParams.set("pid",pid);if(category)u.searchParams.set("category",category);if(date)u.searchParams.set("date",date);return u.toString();}
 export async function runSchedule(now=new Date()){
  const env=runtime();if(env.APP_MODE!=="production"||env.BOT_ENABLED!=="true")return {enabled:false};

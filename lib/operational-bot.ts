@@ -2,14 +2,14 @@ import {taskNotification} from './task-notifications';
 import {summaryNotifications,notificationParts} from './company-notifications';
 import {runtime} from './store';
 import {ensureTasks,pool,localNow} from './production-store';
-import {sendOnce,sendBatchOnce,telegram} from './bot';
+import {sendOnce,sendBatchOnce,sendAccessOnce,telegramAccess} from './bot';
 import {limited} from './production-auth';
 import {accessMember,accessStatus,requestAccess,decideAccess,syncAccessMenu,openAccountMarkup,configureAccessBot} from './observer-access';
 export async function operationalEnabled(){const e=runtime();return !!e.pool&&e.OPERATIONAL_ROLLBACK!=='true'&&(await e.pool.query('SELECT id FROM operational_state WHERE id=1')).rows.length>0;}
 export async function operationalSchedule(){
  const {payload:s}=await ensureTasks(),e=runtime(),clock=localNow();let sent=0;
+ await configureAccessBot();
  if(e.BOT_ENABLED==='true'){
-  await configureAccessBot();
   const identities=(await pool().query('SELECT employee,telegram_id,is_admin FROM operational_identities WHERE is_observer=false')).rows;
   for(const i of identities){const notice=taskNotification(s,i.employee,clock);if(!notice)continue;
    if(await sendOnce(notice.key,i.telegram_id,notice.text,{inline_keyboard:[[{text:'Мои задания',web_app:{url:new URL('/tg',e.MINI_APP_URL).href}}]]}))sent++;
@@ -24,7 +24,7 @@ export async function operationalStart(update:any){
  const cb=update.callback_query,m=cb?.message||update.message,user=cb?.from||m?.from;
  if(!user?.id||m?.chat?.type!=='private'||String(m.chat.id)!==String(user.id))return;
  const chat=String(user.id),member=await accessMember(chat),text=update.message?.text||'',action=cb?.data||'';
- const reply=(message:string,markup?:any)=>sendOnce('update:'+update.update_id,chat,message,markup);
+ const reply=(message:string,markup?:any)=>sendAccessOnce('update:'+update.update_id,chat,message,markup);
  try{
   if(action.startsWith('access:approve:')||action.startsWith('access:reject:')){
    if(!member?.is_admin||member.is_observer)throw Error('Требуются права администратора.');
@@ -55,5 +55,5 @@ export async function operationalStart(update:any){
   }
   if(/^\/(start|id)(?:\s|$)/.test(text))await reply('Для просмотра статистики запросите доступ у администратора.',{inline_keyboard:[[{text:'Запросить доступ',callback_data:'access:request'}]]});
  }catch(error){await reply((error as Error).message);}
- finally{if(cb?.id)try{await telegram('answerCallbackQuery',{callback_query_id:cb.id});}catch{}}
+ finally{if(cb?.id)try{await telegramAccess('answerCallbackQuery',{callback_query_id:cb.id});}catch{}}
 }
