@@ -1,2 +1,2 @@
-import EntryApp from './entry-app';
-export default function Home(){return <EntryApp/>}
+import {redirect} from 'next/navigation';
+export default function Home(){redirect('/web')}
