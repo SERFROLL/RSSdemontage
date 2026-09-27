@@ -28,6 +28,10 @@ export function createPool(config = process.env) {
       ...(config.DATABASE_CA_CERT ? { ca: config.DATABASE_CA_CERT.replaceAll("\\n", "\n") } : {}),
     },
   });
+  // pg's pool listener covers idle clients only. A backend can also disconnect
+  // a checked-out client between queries; its error event must not kill Node.
+  // Query promises still reject, and pg discards disconnected clients on release.
+  pool.on("connect", client => client.on("error", () => console.error("Database client disconnected")));
   pool.on("error", () => console.error("Database connection interrupted"));
   return pool;
 }

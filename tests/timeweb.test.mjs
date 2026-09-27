@@ -41,6 +41,18 @@ test("S3 adapter stores and returns private audio, handles missing objects", asy
   } finally { bucket.close(); await new Promise(resolve=>server.close(resolve)); }
 });
 import {ensureSchedulerSecret,ensureWebhookSecret} from '../server/task-scheduler.mjs';
+import {EventEmitter} from 'node:events';
+import {createPool} from '../server/postgres.mjs';
+
+test('A disconnected checked-out database client cannot crash the server or leak error details',async t=>{
+ const logger=t.mock.method(console,'error',()=>{});
+ const pool=createPool({DATABASE_URL:'postgres://test:test@127.0.0.1:5432/test',DATABASE_SSL:'false'}),client=new EventEmitter();
+ pool.emit('connect',client);
+ assert.doesNotThrow(()=>client.emit('error',Object.assign(Error('private connection details'),{code:'57P05'})));
+ assert.equal(logger.mock.calls.length,1);
+ assert.deepEqual(logger.mock.calls[0].arguments,['Database client disconnected']);
+ await pool.end();
+});
 
 test('Webhook protection survives redeploys, separates bots and preserves explicit configuration',()=>{
  const first=ensureWebhookSecret({TELEGRAM_BOT_TOKEN:'test-bot-a'});
