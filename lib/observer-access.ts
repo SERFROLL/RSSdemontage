@@ -69,7 +69,7 @@ export async function decideAccess(id:string,decision:'approve'|'reject',princip
 }
 export const openAccountMarkup=()=>({inline_keyboard:[[{text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}]]});
 export async function syncAccessMenu(chatId:string,allowed:boolean){
- try{await telegramAccess('setChatMenuButton',{chat_id:chatId,menu_button:allowed?{type:'web_app',text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}:{type:'commands'}});if(!allowed)await telegramAccess('setMyCommands',{scope:{type:'chat',chat_id:chatId},commands:[{command:'access',description:'Запросить доступ'}]});}catch{/* Access persists even when Telegram is unavailable. */}
+ try{await telegramAccess('setChatMenuButton',{chat_id:chatId,menu_button:{type:'web_app',text:'Открыть учёт',web_app:{url:new URL('/tg',runtime().MINI_APP_URL).href}}});if(!allowed)await telegramAccess('setMyCommands',{scope:{type:'chat',chat_id:chatId},commands:[{command:'access',description:'Запросить доступ'}]});return true;}catch{return false;}
 }
 
 let menuReady=false,menuAttempt=0;
@@ -84,10 +84,11 @@ export async function configureAccessBot(){
   const former='https://serfroll-rssdemontage-3c31.twc1.net/api/telegram';
   if((!info.url||info.url===expected||info.url===former)&&e.TELEGRAM_WEBHOOK_SECRET)
    await telegramAccess('setWebhook',{url:expected,secret_token:e.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message','callback_query'],drop_pending_updates:false});
-  await telegramAccess('setMyCommands',{commands:[{command:'access',description:'Запросить доступ'}]});
-  await telegramAccess('setChatMenuButton',{menu_button:{type:'commands'}});
+  await telegramAccess('setMyCommands',{commands:[{command:'start',description:'Открыть учёт'},{command:'access',description:'Запросить доступ'}]});
+  await telegramAccess('setChatMenuButton',{menu_button:{type:'web_app',text:'Открыть учёт',web_app:{url:new URL('/tg',e.MINI_APP_URL).href}}});
   const s=(await row()).payload;
-  for(const i of (await pool().query('SELECT employee,telegram_id FROM operational_identities')).rows)await syncAccessMenu(i.telegram_id,s.employees.some(e=>e.id===i.employee&&e.active));
+  for(const i of (await pool().query('SELECT employee,telegram_id FROM operational_identities')).rows){if(!await syncAccessMenu(i.telegram_id,s.employees.some(e=>e.id===i.employee&&e.active)))throw Error('Menu update incomplete');}
   menuReady=true;
- }catch{/* Retry configuration later without sending test messages. */}
+  console.info('Telegram access menu configured');
+ }catch{console.warn('Telegram access configuration incomplete; retry scheduled');}
 }
