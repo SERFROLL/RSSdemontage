@@ -33,7 +33,7 @@ async function sendClaimed(key:string,chatId:string,text:string,markup:any,send:
 }
 export const sendOnce=(key:string,chatId:string,text:string,markup?:any)=>sendClaimed(key,chatId,text,markup,telegram);
 export const sendAccessOnce=(key:string,chatId:string,text:string,markup?:any)=>sendClaimed(key,chatId,text,markup,telegramAccess);
-export function miniUrl(env:any,pid?:string,category?:string,date?:string){const u=new URL(env.MINI_APP_URL);if(pid)u.searchParams.set("pid",pid);if(category)u.searchParams.set("category",category);if(date)u.searchParams.set("date",date);return u.toString();}
+export function miniUrl(env:any,pid?:string,category?:string,date?:string){const u=new URL('/tg',env.MINI_APP_URL);if(pid)u.searchParams.set("pid",pid);if(category)u.searchParams.set("category",category);if(date)u.searchParams.set("date",date);return u.toString();}
 export async function runSchedule(now=new Date()){
  const env=runtime();if(env.APP_MODE!=="production"||env.BOT_ENABLED!=="true")return {enabled:false};
  const date=today(now),hour=Number(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Krasnoyarsk",hour:"2-digit",hourCycle:"h23"}).format(now));

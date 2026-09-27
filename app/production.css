@@ -96,3 +96,11 @@
 .c-review.tg .c-table.balance .c-number-link{font-size:13px;letter-spacing:-.2px;white-space:nowrap;min-height:38px;max-width:none;padding:0}
 .c-cable-name{display:block}.c-cable-name>span{display:block;white-space:nowrap;line-height:1.5}
 @media(max-width:360px){.production.tg .c-app-content{padding:14px 10px 100px}.c-review.tg .c-balance{padding:10px}.c-review.tg .c-table.balance,.c-review.tg .c-table.balance .c-number-link{font-size:12px}.c-review.tg .c-table.balance th:first-child{font-size:11px;padding-left:5px}.production .c-domain-login{padding:9px}.production .c-domain-login b{font-size:16px}.production.tg .c-compact-header>div>b{font-size:15px}}
+/* Balance figures use the same four centered columns in TG and WEB. */
+.c-review:is(.tg,.web) .c-table.balance{table-layout:fixed;width:100%;min-width:0}
+.c-review:is(.tg,.web) .c-table.balance col.balance-name{width:28%}
+.c-review:is(.tg,.web) .c-table.balance col.balance-number{width:18%}
+.c-review:is(.tg,.web) .c-table.balance th,.c-review:is(.tg,.web) .c-table.balance td{padding:10px 3px;vertical-align:middle}
+.c-review:is(.tg,.web) .c-table.balance th:not(:first-child),.c-review:is(.tg,.web) .c-table.balance td{text-align:center}
+.c-review:is(.tg,.web) .c-table.balance th:first-child{padding-left:6px;white-space:normal;overflow-wrap:normal}
+.c-review:is(.tg,.web) .c-table.balance .c-number-link{max-width:100%;padding:0;font-size:clamp(11px,3.1vw,14px);letter-spacing:-.15px;white-space:nowrap;font-variant-numeric:tabular-nums}

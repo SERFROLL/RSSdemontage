@@ -191,7 +191,8 @@ check('Расписание: выбранные периоды, отключен
  const originalFetch=globalThis.fetch;let deliveries=0;
  globalThis.fetch=async()=>{deliveries++;return Response.json({ok:true,result:{message_id:1}})};
  try{
-  const {sendOnce,sendBatchOnce}=await import(`../${out}/bot.mjs`),notice=N.taskNotification(tomorrow,'a',noticeClock);
+  const {sendOnce,sendBatchOnce,miniUrl}=await import(`../${out}/bot.mjs`),notice=N.taskNotification(tomorrow,'a',noticeClock);
+  assert.equal(miniUrl({MINI_APP_URL:'https://example.test/'}),'https://example.test/tg');
   const concurrent=await Promise.all([sendOnce(notice.key,'test',notice.text),sendOnce(notice.key,'test',notice.text)]);
   assert.equal(concurrent.filter(Boolean).length,1);assert.equal(deliveries,1);assert.equal(await sendOnce(notice.key,'test','Changed settings'),false);assert.equal(deliveries,1);
   checks++;console.log('PASS Notification delivery: concurrent schedule and retries send only once');
