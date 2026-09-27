@@ -40,7 +40,16 @@ test("S3 adapter stores and returns private audio, handles missing objects", asy
     assert.equal(await bucket.get("production/audio/missing"),null);
   } finally { bucket.close(); await new Promise(resolve=>server.close(resolve)); }
 });
-import {ensureSchedulerSecret} from '../server/task-scheduler.mjs';
+import {ensureSchedulerSecret,ensureWebhookSecret} from '../server/task-scheduler.mjs';
+
+test('Webhook protection survives redeploys, separates bots and preserves explicit configuration',()=>{
+ const first=ensureWebhookSecret({TELEGRAM_BOT_TOKEN:'test-bot-a'});
+ assert.match(first,/^[a-f0-9]{64}$/);
+ assert.equal(ensureWebhookSecret({TELEGRAM_BOT_TOKEN:'test-bot-a'}),first);
+ assert.notEqual(ensureWebhookSecret({TELEGRAM_BOT_TOKEN:'test-bot-b'}),first);
+ assert.equal(ensureWebhookSecret({TELEGRAM_WEBHOOK_SECRET:'configured',TELEGRAM_BOT_TOKEN:'test-bot-a'}),'configured');
+ assert.equal(ensureWebhookSecret({}),undefined);
+});
 
 test('Internal scheduler is enabled without external credentials and preserves configured keys', () => {
  const config={};const first=ensureSchedulerSecret(config);assert.match(first,/^[a-f0-9]{64}$/);assert.equal(ensureSchedulerSecret(config),first);assert.notEqual(ensureSchedulerSecret({}),first);assert.equal(ensureSchedulerSecret({SCHEDULER_SECRET:'existing-key'}),'existing-key');assert.equal(config.BOT_ENABLED,undefined);
