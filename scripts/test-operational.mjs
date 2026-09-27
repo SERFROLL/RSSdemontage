@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 const out='outputs/operational-test';mkdirSync(out,{recursive:true});
-for(const name of ['observer-access','observer-state','operational-bot','pid-summary','stats-filters','bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
+for(const name of ['access-workflow','observer-access','observer-state','operational-bot','pid-summary','stats-filters','bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
  const code=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from (['"])\.\/([a-z-]+)\1/g,'from "./$2.mjs"');writeFileSync(`${out}/${name}.mjs`,code);
 }
 writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV; export const database=()=>runtime().DB; export const readDocs=()=>{throw Error("Not used")}; export const saveDoc=readDocs; export const hash=readDocs;');
@@ -208,7 +208,7 @@ if(process.env.TEST_DATABASE_URL){
  const url=new URL(process.env.TEST_DATABASE_URL);if(!['localhost','127.0.0.1'].includes(url.hostname)||url.pathname!='/pid_cable_test')throw Error('Dedicated local test database required');
  const {default:pg}=await import('pg');const root=new pg.Pool({connectionString:url.href});await root.query('CREATE SCHEMA IF NOT EXISTS operational_test');
  const pool=new pg.Pool({connectionString:url.href,options:'-c search_path=operational_test'});const {migrate}=await import('../server/migrate.mjs');await migrate(pool);await migrate(pool);
- globalThis.OPERATIONAL_TEST_ENV={pool,TELEGRAM_BOT_TOKEN:'test-token'};
+ globalThis.OPERATIONAL_TEST_ENV={pool,TELEGRAM_BOT_TOKEN:'test-token',MINI_APP_URL:'https://example.test'};
  const S=await import(`../${out}/production-store.mjs`),A=await import(`../${out}/production-auth.mjs`);
  try{
   await S.transaction(async c=>{await S.record(c,undefined,s,1,'fixture-initial','fixture','system',{});for(const [index,e] of s.employees.entries())await c.query('INSERT INTO operational_identities(employee,telegram_id,is_admin) VALUES($1,$2,$3)',[e.id,String(123456789+index),e.id==='boss'])});
@@ -234,13 +234,17 @@ if(process.env.TEST_DATABASE_URL){
   const O=await import('../'+out+'/observer-access.mjs');
   const beforeObservers=await S.row();
   assert.equal((await O.accessStatus('555000111')).status,'new');
-  await assert.rejects(O.requestAccess({id:555000111},'Однослово'),/имя и фамилию/);
-  const requested=await O.requestAccess({id:555000111,first_name:'Иван',last_name:'Тестов'},'Иван Тестов');
+  const draft=await O.requestAccess({id:555000111},'',false);assert.equal(draft.status,'draft');assert.equal(draft.name,'');assert.equal((await O.requestAccess({id:555000111},'',false)).id,draft.id);
+  await assert.rejects(O.requestAccess({id:555000111},''),/Представьтесь/);
+  const requested=await O.requestAccess({id:555000111,first_name:'Иван',last_name:'Тестов'},'Иван');
   assert.equal(requested.status,'pending');assert.equal((await O.requestAccess({id:555000111},'Другое Имя')).id,requested.id);
   await assert.rejects(O.decideAccess(requested.id,'approve',a),/администратора/);
-  await O.decideAccess(requested.id,'approve',boss);
+  await assert.rejects(O.decideAccess(requested.id,'approve',boss),/роль/);
+  await O.decideAccess(requested.id,'approve',boss,{name:'Иван Тестов — проверено администратором',role:'observer'});
+  const approvedMember=await O.accessMember('555000111');assert.equal((await S.row()).payload.employees.find(e=>e.id===approvedMember.employee).name,'Иван Тестов — проверено администратором');
   const member=await O.accessMember('555000111');assert.equal(member.is_observer,true);assert.equal(member.is_admin,false);
-  await assert.rejects(O.decideAccess(requested.id,'approve',boss),/рассмотрена/);
+  assert.equal((await O.decideAccess(requested.id,'approve',boss,{role:'observer',name:'Повтор'})).ok,true);
+  await assert.rejects(O.decideAccess(requested.id,'reject',boss),/рассмотрена/);
   const viewerParams=new URLSearchParams({auth_date:String(Math.floor(Date.now()/1000)),user:JSON.stringify({id:555000111})});
   viewerParams.set('hash',createHmac('sha256',key).update([...viewerParams].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>k+'='+v).join('\n')).digest('hex'));
   const viewerRequest=new Request('https://example.test',{headers:{'x-telegram-init-data':viewerParams.toString()}}),viewer=await A.authenticate(viewerRequest);
@@ -256,12 +260,27 @@ if(process.env.TEST_DATABASE_URL){
   const rejected=await O.requestAccess({id:555000222},'Пётр Тестов');await O.decideAccess(rejected.id,'reject',boss);
   assert.equal((await O.accessStatus('555000222')).status,'rejected');assert.equal(await O.accessMember('555000222'),null);
   const retryRequest=await O.requestAccess({id:555000222},'Пётр Тестов');assert.notEqual(retryRequest.id,rejected.id);
-  await assert.rejects(O.decideAccess(retryRequest.id,'approve',boss,'a'),/уже имеет Telegram/);
+  await assert.rejects(O.decideAccess(retryRequest.id,'approve',boss,{employee:'a',role:'employee'}),/уже имеет Telegram/);
   await S.mutate({revision:(await S.row()).revision,requestId:'new-unlinked-employee',patches:[{key:'employees',rows:[{id:'unlinked',name:'Пётр Тестов',active:true}]}]},boss);
-  await assert.rejects(O.decideAccess(retryRequest.id,'approve',boss),/Такое имя уже есть/);
-  await O.decideAccess(retryRequest.id,'approve',boss,'unlinked');assert.equal((await O.accessMember('555000222')).employee,'unlinked');
+  await assert.rejects(O.decideAccess(retryRequest.id,'approve',boss,{employee:'unlinked'}),/роль/);
+  await O.decideAccess(retryRequest.id,'approve',boss,{employee:'unlinked',role:'employee'});assert.equal((await O.accessMember('555000222')).employee,'unlinked');
   await S.mutate({revision:(await S.row()).revision,requestId:'disable-observer-test',patches:[{key:'employees',rows:[{id:'unlinked',name:'Пётр Тестов',active:false}]}]},boss);
   assert.equal((await O.accessStatus('555000222')).status,'disabled');await assert.rejects(O.requestAccess({id:555000222},'Другое Имя'),/уже назначен/);
+  assert.equal((await pool.query("SELECT count(*) AS n FROM operational_access_history WHERE telegram_id='555000222' AND event='rejected'")).rows[0].n,'1');
+  const duplicateName=await O.requestAccess({id:555000333},'Иван');
+  const decisions=await Promise.allSettled([O.decideAccess(duplicateName.id,'approve',boss,{name:'Иван Тестов — проверено администратором',role:'admin'}),O.decideAccess(duplicateName.id,'reject',boss)]);
+  assert.equal(decisions.filter(r=>r.status==='fulfilled').length,1);
+  assert.equal((await O.accessMember('555000333')).is_admin,true);
+  assert.equal((await pool.query('SELECT count(*) AS n FROM operational_access_outbox WHERE key=$1',['request:'+requested.id])).rows[0].n,'1');
+  assert.equal((await pool.query('SELECT count(*) AS n FROM operational_access_outbox WHERE key=$1',['result:'+requested.id])).rows[0].n,'1');
+  // Delivery failure does not undo the grant; a later attempt delivers it.
+  const oldFetch=globalThis.fetch;globalThis.OPERATIONAL_TEST_ENV.APP_MODE='production';
+  try{globalThis.fetch=async()=>{throw Error('offline')};await O.flushAccessMessages();assert.equal((await O.accessStatus('555000111')).status,'approved');
+   assert.ok((await pool.query('SELECT * FROM operational_access_outbox WHERE delivered_at IS NULL AND attempts>0')).rows.length);
+   await pool.query("UPDATE operational_access_outbox SET next_attempt=now()-interval '1 minute'");
+   globalThis.fetch=async()=>Response.json({ok:true,result:{message_id:1}});await O.flushAccessMessages();
+   assert.ok((await pool.query('SELECT * FROM operational_access_outbox WHERE delivered_at IS NOT NULL')).rows.length);
+  }finally{globalThis.fetch=oldFetch;delete globalThis.OPERATIONAL_TEST_ENV.APP_MODE;}
   checks++;console.log('PASS PostgreSQL observer request, approval, rejection, linking, TG/WEB read-only and unchanged ledger');
   assert.equal((await pool.query('SELECT material,unit,SUM(quantity) FROM operational_postings GROUP BY material,unit HAVING SUM(quantity)<>0')).rows.length,0);checks++;console.log('PASS PostgreSQL journal balances');
   await root.query('CREATE SCHEMA IF NOT EXISTS daily_test');const dailyPool=new pg.Pool({connectionString:url.href,options:'-c search_path=daily_test'});
@@ -272,7 +291,7 @@ if(process.env.TEST_DATABASE_URL){
    const results=await Promise.all([S.ensureTasks(),S.ensureTasks()]);const migrated=await S.row();assert.equal(migrated.payload.dailyVersion,1);assert.equal(migrated.payload.dailyTasks.length,2);assert.equal(migrated.revision,2);assert.deepEqual(migrated.payload.documents,initial.documents);assert.equal((await dailyPool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,postingCount);assert.equal((await dailyPool.query('SELECT count(*) AS n FROM operational_backups')).rows[0].n,'1');
    const target=migrated.payload.dailyTasks.find(t=>t.warehouse==='a101'),request={revision:2,requestId:'daily-request-concurrent-1',patches:[{key:'dailySubmission',rows:[{id:target.id,mode:'off',reason:'Выходной день',crew:[],lines:[]}]}]};
    const saved=await Promise.allSettled([S.mutate(request,helper),S.mutate({...request,requestId:'daily-request-concurrent-2'},a)]);assert.equal(saved.filter(x=>x.status==='fulfilled').length,1);assert.ok(Daily.completed((await S.row()).payload,target));assert.equal((await dailyPool.query('SELECT count(*) AS n FROM operational_postings')).rows[0].n,postingCount);checks++;console.log('PASS PostgreSQL atomic one-time daily migration, backup, unchanged postings, concurrent owner/helper closure');
-  }finally{await dailyPool.end();await root.query('DROP SCHEMA daily_test CASCADE');globalThis.OPERATIONAL_TEST_ENV={pool,TELEGRAM_BOT_TOKEN:'test-token'};}
+  }finally{await dailyPool.end();await root.query('DROP SCHEMA daily_test CASCADE');globalThis.OPERATIONAL_TEST_ENV={pool,TELEGRAM_BOT_TOKEN:'test-token',MINI_APP_URL:'https://example.test'};}
 
  }finally{await pool.end();await root.query('DROP SCHEMA operational_test CASCADE');await root.end();}
 }

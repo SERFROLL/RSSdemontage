@@ -8,7 +8,7 @@ const unauthorized=()=>Object.assign(Error('Войдите через Telegram.'
 export async function authenticate(request:Request,tgOnly=false){
  if(runtime().OPERATIONAL_ROLLBACK==='true')throw Object.assign(Error('Новый учёт временно закрыт для отката.'),{status:503});
  const init=request.headers.get('x-telegram-init-data');let member;
- if(init){const user=await validateTelegram(init,runtime().TELEGRAM_BOT_TOKEN||'');const r=await pool().query('SELECT employee,is_admin,is_observer FROM operational_identities WHERE telegram_id=$1',[String(user.id)]);member=r.rows[0];if(!member)throw Object.assign(Error('Запросите доступ к просмотру статистики.'),{status:403});}
+ if(init){const user=await validateTelegram(init,runtime().TELEGRAM_BOT_TOKEN||'');const r=await pool().query('SELECT employee,is_admin,is_observer FROM operational_identities WHERE telegram_id=$1',[String(user.id)]);member=r.rows[0];if(!member)throw Object.assign(Error('Нет доступа. Запросите его у администратора.'),{status:403});}
  else if(!tgOnly){const token=cookie(request,cookieName);if(!token)throw unauthorized();const r=await pool().query('SELECT i.employee,i.is_admin,i.is_observer FROM operational_sessions s JOIN operational_identities i ON i.employee=s.employee WHERE s.token_hash=$1 AND s.expires_at>now()',[digest(token)]);member=r.rows[0];}
  if(!member)throw unauthorized();const current=await row();const employee=current.payload.employees.find(e=>e.id===member.employee&&e.active);if(!employee)throw Object.assign(Error('Сотрудник отключён.'),{status:403});
  return {employee:employee.id,name:employee.name,admin:!!member.is_admin&&!member.is_observer,observer:!!member.is_observer};

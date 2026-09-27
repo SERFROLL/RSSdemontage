@@ -3,12 +3,13 @@ import {summaryNotifications,notificationParts} from './company-notifications';
 import {runtime} from './store';
 import {ensureTasks,pool,localNow} from './production-store';
 import {sendOnce,sendBatchOnce,sendAccessOnce,telegramAccess} from './bot';
+import {accessMessages} from './access-workflow';
 import {limited} from './production-auth';
-import {accessMember,accessStatus,requestAccess,decideAccess,syncAccessMenu,openAccountMarkup,configureAccessBot} from './observer-access';
+import {accessMember,accessStatus,requestAccess,decideAccess,syncAccessMenu,openAccountMarkup,configureAccessBot,flushAccessMessages} from './observer-access';
 export async function operationalEnabled(){const e=runtime();return !!e.pool&&e.OPERATIONAL_ROLLBACK!=='true'&&(await e.pool.query('SELECT id FROM operational_state WHERE id=1')).rows.length>0;}
 export async function operationalSchedule(){
  const {payload:s}=await ensureTasks(),e=runtime(),clock=localNow();let sent=0;
- await configureAccessBot();
+ await configureAccessBot();await flushAccessMessages();
  if(e.BOT_ENABLED==='true'){
   const identities=(await pool().query('SELECT employee,telegram_id,is_admin FROM operational_identities WHERE is_observer=false')).rows;
   for(const i of identities){const notice=taskNotification(s,i.employee,clock);if(!notice)continue;
@@ -28,32 +29,30 @@ export async function operationalStart(update:any){
  try{
   if(action.startsWith('access:approve:')||action.startsWith('access:reject:')){
    if(!member?.is_admin||member.is_observer)throw Error('Требуются права администратора.');
-   const [,decision,id]=action.split(':');await decideAccess(id,decision as 'approve'|'reject',{employee:member.employee,admin:true});
-   await reply('Заявка рассмотрена.');return;
+   const [,decision,id]=action.split(':');
+   if(decision==='approve'){await reply('Рассмотрите заявку и назначьте права.',{inline_keyboard:[[{text:'Рассмотреть',web_app:{url:new URL('/tg?accessRequest='+id,runtime().MINI_APP_URL).href}}]]});return;}
+   await decideAccess(id,'reject',{employee:member.employee,admin:true});
+   void flushAccessMessages().catch(()=>console.warn('Access notification delivery deferred'));
+   await reply('Заявка отклонена.');return;
   }
-  if(member){
-   if(!/^\/(start|id|access)(?:\s|$)/.test(text)&&!action.startsWith('access:'))return;
-   await syncAccessMenu(chat,true);
-   await reply((/^\/id(?:\s|$)/.test(text)?`Ваш Telegram ID: ${user.id}.\n`:'')+(member.is_observer?'Доступен просмотр статистики компании.':'Откройте учёт: доступны разделы по вашим правам.'),openAccountMarkup());return;
+  if(/^\/start(?:\s|$)/.test(text)&&text!=='/start access'){
+   await reply('Нажмите «ОТКРЫТЬ УЧЁТ».',openAccountMarkup());return;
   }
-  const status=await accessStatus(chat);await syncAccessMenu(chat,false);
-  if(status.status==='disabled'){await reply('Доступ отключён. Обратитесь к администратору.');return;}
-  if(status.status==='pending'){await reply('Запрос отправлен. Ожидайте решения администратора.');return;}
-  if(action==='access:confirm'){
-   if(status.status!=='draft')throw Error('Нажмите «Запросить доступ».');
-   if(status.name==='Имя Фамилия')throw Error('Сначала напишите ваше имя и фамилию одним сообщением.');
-   await limited(pool(),'access:'+chat,10);await requestAccess(user,status.name);await reply('Запрос отправлен. Ожидайте решения администратора.');return;
-  }
-  if(action==='access:request'||text==='/access'){
-   await limited(pool(),'access:'+chat,10);
-   const suggested=[user.first_name,user.last_name].filter(Boolean).join(' ');
-   if(suggested.split(' ').length<2){await requestAccess(user,'Имя Фамилия',false);await reply('Напишите ваше имя и фамилию одним сообщением.');return;}
-   await requestAccess(user,suggested,false);await reply(`Проверьте имя и фамилию: ${suggested}\nЕсли нужно исправить — напишите их одним сообщением.`,{inline_keyboard:[[{text:'Подтвердить и запросить доступ',callback_data:'access:confirm'}]]});return;
+  if(member){await reply('Откройте учёт: доступны разделы по вашим правам.',openAccountMarkup());return;}
+  const status=await accessStatus(chat);
+  if(status.status==='disabled'){await reply(accessMessages.disabled);return;}
+  if(status.status==='pending'){await reply(accessMessages.pending);return;}
+  if(action==='access:request'||text==='/access'||text==='/start access'){
+   await limited(pool(),'access:'+chat,10);await requestAccess(user,'',false);
+   if(status.status==='draft')await reply(accessMessages.introduce,{force_reply:true});
+   void flushAccessMessages().catch(()=>console.warn('Access notification delivery deferred'));return;
   }
   if(status.status==='draft'&&text&&!text.startsWith('/')){
-   await limited(pool(),'access:'+chat,10);await requestAccess(user,text,false);await reply(`Имя и фамилия: ${text.trim()}\nДоступ предоставляется только к просмотру статистики.`,{inline_keyboard:[[{text:'Подтвердить и запросить доступ',callback_data:'access:confirm'}]]});return;
+   await limited(pool(),'access:'+chat,10);await requestAccess(user,text);
+   void flushAccessMessages().catch(()=>console.warn('Access notification delivery deferred'));return;
   }
-  if(/^\/(start|id)(?:\s|$)/.test(text))await reply('Для просмотра статистики запросите доступ у администратора.',{inline_keyboard:[[{text:'Запросить доступ',callback_data:'access:request'}]]});
+  if(action==='access:confirm'){await reply('Представьтесь одним сообщением. ФИО будет комментарием для администратора.',{force_reply:true});return;}
+  await reply('Нажмите «ОТКРЫТЬ УЧЁТ».',openAccountMarkup());
  }catch(error){await reply((error as Error).message);}
  finally{if(cb?.id)try{await telegramAccess('answerCallbackQuery',{callback_query_id:cb.id});}catch{}}
 }
