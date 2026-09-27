@@ -19,10 +19,21 @@ export function dailyText(docs:Doc[],date:string){
 }
 async function telegramCall(method:string,body:any,accessOnly:boolean){
  const e=runtime();must(e.APP_MODE==="production"&&(accessOnly||e.BOT_ENABLED==="true"),"Отправка сообщений на стенде отключена",503);must(e.TELEGRAM_BOT_TOKEN,"Бот не настроен",503);
- // Never log URLs or exceptions: the Bot API places the credential in its URL.
- let response:Response;try{response=await fetch("https://api.telegram.org/bot"+e.TELEGRAM_BOT_TOKEN+"/"+method,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});}catch{throw new DomainError("Не удалось подтвердить отправку сообщения",503);}
- const r:any=await response.json();if(!r.ok)throw new DomainError("Telegram отклонил отправку",502);return r.result;
+ // Expose only categories and status codes, never credentials, URLs or raw errors.
+ let response:Response;try{response=await fetch("https://api.telegram.org/bot"+e.TELEGRAM_BOT_TOKEN+"/"+method,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});}catch(error){
+  const code=(error as any)?.cause?.code||(error as any)?.code;
+  const allowed=['ENOTFOUND','EAI_AGAIN','ECONNREFUSED','ECONNRESET','ETIMEDOUT','UND_ERR_CONNECT_TIMEOUT','CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE','DEPTH_ZERO_SELF_SIGNED_CERT','UNABLE_TO_GET_ISSUER_CERT_LOCALLY'];
+  throw Object.assign(new DomainError("Не удалось подтвердить отправку сообщения",503),{telegramDiagnostic:{method,category:allowed.includes(code)?code:(error as any)?.name==='TimeoutError'?'timeout':'network_error'}});
+ }
+ let r:any;try{r=await response.json()}catch{throw Object.assign(new DomainError('Telegram вернул неполный ответ',502),{telegramDiagnostic:{method,httpStatus:response.status,category:'invalid_response'}});}
+ if(!r.ok){
+  const description=String(r.description||'').toLowerCase();
+  const category=response.status===401?'unauthorized':response.status===429?'rate_limit':description.includes('chat not found')?'chat_not_found':description.includes('blocked')?'bot_blocked':description.includes('certificate')||description.includes('ssl')?'webhook_certificate':description.includes('resolve')||description.includes('dns')?'webhook_dns':description.includes('webhook')?'webhook_rejected':'telegram_rejected';
+  throw Object.assign(new DomainError("Telegram отклонил отправку",502),{telegramDiagnostic:{method,httpStatus:response.status,telegramCode:Number(r.error_code)||0,category}});
+ }
+ return r.result;
 }
+export const telegramDiagnostic=(error:unknown)=>(error as {telegramDiagnostic?:unknown})?.telegramDiagnostic||{category:'internal_error'};
 export const telegram=(method:string,body:any)=>telegramCall(method,body,false);
 export const telegramAccess=(method:string,body:any)=>telegramCall(method,body,true);
 async function sendClaimed(key:string,chatId:string,text:string,markup:any,send:typeof telegram){
