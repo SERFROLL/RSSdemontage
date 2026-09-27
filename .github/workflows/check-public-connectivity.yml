@@ -1,0 +1,30 @@
+name: Public connectivity check
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/check-public-connectivity.yml']
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check public DNS and HTTPS without credentials
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import {lookup} from 'node:dns/promises';
+          for (const host of ['rss3s.ru','serfroll-rssdemontage-3c31.twc1.net']) {
+            try { console.log(JSON.stringify({host,dns:await lookup(host,{all:true})})); }
+            catch(e) { console.log(JSON.stringify({host,dnsError:e.code})); }
+            for (const path of ['/api/health','/web']) {
+              const started=Date.now();
+              try {
+                const r=await fetch('https://'+host+path,{signal:AbortSignal.timeout(15000)});
+                const text=await r.text();
+                console.log(JSON.stringify({host,path,status:r.status,bytes:text.length,elapsedMs:Date.now()-started,...(path==='/api/health'?{body:text.slice(0,200)}:{})}));
+              } catch(e) { console.log(JSON.stringify({host,path,error:e.name,code:e.cause?.code,elapsedMs:Date.now()-started})); }
+            }
+          }
+          JS
