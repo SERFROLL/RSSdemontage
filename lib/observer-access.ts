@@ -79,8 +79,10 @@ export async function configureAccessBot(){
  try{
   const e=runtime(),info=await telegramAccess('getWebhookInfo',{});
   const expected=new URL('/api/telegram',e.MINI_APP_URL).href;
-  if((info.url&&info.url!==expected)||!e.TELEGRAM_WEBHOOK_SECRET)return;
-  await telegramAccess('setWebhook',{url:expected,secret_token:e.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message','callback_query'],drop_pending_updates:false});
+  // A domain change must update account buttons even while the existing webhook
+  // keeps receiving updates through the application's technical domain.
+  if((!info.url||info.url===expected)&&e.TELEGRAM_WEBHOOK_SECRET)
+   await telegramAccess('setWebhook',{url:expected,secret_token:e.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message','callback_query'],drop_pending_updates:false});
   await telegramAccess('setMyCommands',{commands:[{command:'access',description:'Запросить доступ'}]});
   await telegramAccess('setChatMenuButton',{menu_button:{type:'commands'}});
   const s=(await row()).payload;
