@@ -12,7 +12,7 @@ export function ReceiptMassInput({weights,sent,entries,onChange,onDraftChange}:{
  const toggle=(index:number)=>onChange(entries.some(e=>e.sourceIndex===index)?entries.filter(e=>e.sourceIndex!==index):[...entries,{kg:weights[index],sourceIndex:index}]);
  const add=()=>{try{const kg=parseReceiptMass(text,unit);onChange([...entries,{kg}]);setText('');setError('');onDraftChange(false);}catch(e){setError((e as Error).message)}};
  return <div className="c-receipt">
-  <h3>Отправленные катушки</h3>
+  <h3>Массы катушек, кг</h3>
   {weights.length?<><p className="c-help">Нажмите массу фактически принятой катушки. Повторное нажатие уберёт её из подтверждения. Все массы на кнопках — в кг.</p><div className="c-receipt-coils">{sortedWeights.map(({kg,index})=><button type="button" key={index} aria-label={fmt(kg,3)+' кг, катушка '+(index+1)} aria-pressed={entries.some(e=>e.sourceIndex===index)} onClick={()=>toggle(index)}><b>{fmt(kg,3)}</b></button>)}</div></>:<p className="c-help">В документе нет масс отдельных катушек. Добавьте результаты своего взвешивания ниже.</p>}
   <section className="c-receipt-confirmed" aria-label="Подтверждённое значение массы">
    <h3>Подтверждённое значение массы</h3>
