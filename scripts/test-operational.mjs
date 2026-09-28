@@ -97,6 +97,24 @@ check('Исправление смены сохраняет версии и сн
 
 check('Неуказанные работы нельзя тихо пропустить',()=>assert.throws(()=>Daily.saveDaily(daily,{id:fieldTask.id,mode:'work',reason:'',crew:[],lines:[{work:'dig',material:'',qty:10}]},'helper'),/каждую/));
 const fieldSubmission={id:fieldTask.id,mode:'work',reason:'',crew:[],lines:[{work:'dig',material:'',qty:1000},{work:'extract',material:'c',qty:2000,measureId:'m',confirmed:true},{work:'wind',material:'c',qty:4}]};
+check('Новая доверенность сразу открывает старое задание и сохраняет фактического автора',()=>{
+ const before=structuredClone(daily);before.replacements=[];before.dailyTasks=before.dailyTasks.map(t=>({...t,editors:[t.employee]}));
+ const granted=D.applyChanges(before,[{key:'replacements',rows:[{warehouse:'a101',deputy:'helper',active:true}]}],boss);
+ assert.equal(Daily.canFill(before,fieldTask,'helper'),false);assert.equal(Daily.canFill(granted,fieldTask,'helper'),true);assert.equal(Daily.canFill(granted,masterTask,'helper'),false);
+ assert.deepEqual(granted.dailyTasks,before.dailyTasks);assert.deepEqual(granted.documents,before.documents);
+ const saved=D.applyChanges(granted,[{key:'dailySubmission',rows:[fieldSubmission]}],helper);
+ assert.ok(Daily.completed(saved,fieldTask));assert.ok(Daily.documents(saved,fieldTask).every(d=>M.current(d).actor==='helper'&&d.assignment.responsible==='a'&&d.assignment.warehouse==='a101'));
+ const revoked=D.applyChanges(granted,[{key:'replacements',rows:[{warehouse:'a101',deputy:'helper',active:false}]}],boss);
+ assert.equal(Daily.canFill(revoked,fieldTask,'helper'),false);assert.throws(()=>D.applyChanges(revoked,[{key:'dailySubmission',rows:[fieldSubmission]}],helper),/Нет доступа/);
+ const disabled={...granted,employees:granted.employees.map(e=>e.id==='helper'?{...e,active:false}:e)};assert.equal(Daily.canFill(disabled,fieldTask,'helper'),false);
+ const closedRevoked=D.applyChanges(saved,[{key:'replacements',rows:[{warehouse:'a101',deputy:'helper',active:false}]}],boss);assert.deepEqual(closedRevoked.documents,saved.documents);assert.deepEqual(D.postings(closedRevoked),D.postings(saved));
+ assert.ok(Daily.documents(closedRevoked,fieldTask).every(d=>!M.canReport(closedRevoked,d.assignment,'helper')));
+});
+check('Старая запись исполнителя не сохраняет доступ после отключения доверенности',()=>{
+ const revoked=D.applyChanges(daily,[{key:'replacements',rows:[{warehouse:'a101',deputy:'helper',active:false}]}],boss);
+ assert.ok(fieldTask.editors.includes('helper'));assert.equal(Daily.canFill(revoked,fieldTask,'helper'),false);assert.equal(Daily.canFill(revoked,fieldTask,'a'),true);
+ assert.throws(()=>D.applyChanges(revoked,[{key:'dailySubmission',rows:[fieldSubmission]}],helper),/Нет доступа/);
+});
 daily=D.applyChanges(daily,[{key:'dailySubmission',rows:[fieldSubmission]}],helper);
 check('Доверенный закрывает одно задание у себя и МОЛ, автор и склад сохранены',()=>{assert.ok(Daily.completed(daily,fieldTask));assert.ok(Daily.canFill(daily,fieldTask,'a'));assert.ok(Daily.canFill(daily,fieldTask,'helper'));assert.ok(Daily.documents(daily,fieldTask).every(d=>M.current(d).actor==='helper'&&d.assignment.responsible==='a'));assert.equal(M.stock(daily,'a101','c'),3.376)});
 check('Служебные задания нельзя подменить запросом браузера',()=>assert.throws(()=>D.applyChanges(daily,[{key:'dailyTasks',rows:[{...fieldTask,employee:'boss'}]}],boss),/Служебные/));

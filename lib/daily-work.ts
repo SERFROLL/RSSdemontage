@@ -10,7 +10,7 @@ export const effectiveFunctions=(d:Duty)=>d.active?d.functions:[];
 const unique=<T,>(a:T[])=>[...new Set(a)];
 export const dutyWarehouse=(s:M.State,d:Pick<Duty,'employee'|'pid'>)=>s.warehouses.find(w=>w.owner===d.employee&&w.pid===d.pid);
 export const dailyId=(date:string,warehouse:string)=>'day:'+date+':'+warehouse;
-export function canFill(s:M.State,t:DailyTask,employee:string){return s.employees.some(e=>e.id===employee&&e.active)&&t.editors.includes(employee);}
+export function canFill(s:M.State,t:DailyTask,employee:string){return M.canFillDailyTask(s,t,employee);}
 export function documents(s:M.State,t:DailyTask){return s.documents.filter((d):d is M.WorkDoc=>d.kind==='work'&&(t.legacyTaskIds.includes(d.taskId)||d.taskId.startsWith(t.id+'#')));}
 export const remaining=(s:M.State,t:DailyTask)=>t.functions.filter(w=>!documents(s,t).some(d=>d.assignment.work===w));
 export const completed=(s:M.State,t:DailyTask)=>remaining(s,t).length===0;

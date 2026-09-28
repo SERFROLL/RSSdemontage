@@ -78,7 +78,12 @@ export function generate(s:State,date:string,hour=9):State{
 }
 export const cleanAssignment = (a:Assignment):Assignment => ({id:a.id,warehouse:a.warehouse,material:a.work==='dig'?'':a.material,work:a.work,active:a.active});
 export const assignmentOwner = (s:State,a:AssignedWork) => a.responsible||s.warehouses.find(w=>w.id===a.warehouse)!.owner;
-export function canReport(s:State,a:AssignedWork,actor:string){return actor==='admin'||(s.employees.some(p=>p.id===actor&&p.active)&&(a.editors?a.editors.includes(actor):canManageWarehouse(s,a.warehouse,actor)));}
+// Daily permissions follow the current delegation; stored editor lists remain historical snapshots.
+export function canFillDailyTask(s:State,t:DailyTask,actor:string){return s.employees.some(e=>e.id===actor&&e.active)&&(t.employee===actor||s.replacements.some(r=>r.active&&r.warehouse===t.warehouse&&r.deputy===actor));}
+export function canReport(s:State,a:AssignedWork,actor:string){
+ const day=s.dailyTasks?.find(t=>a.id==='line:'+t.id||t.legacyTaskIds.some(id=>s.tasks.some(task=>task.id===id&&task.assignment.id===a.id)));
+ return actor==='admin'||(day?canFillDailyTask(s,day,actor):(s.employees.some(p=>p.id===actor&&p.active)&&(a.editors?a.editors.includes(actor):canManageWarehouse(s,a.warehouse,actor))));
+}
 export function taskPlace(s:State,warehouseId:string,actor:string,date:string){
  const w=s.warehouses.find(w=>w.id===warehouseId);if(!w?.pid)return warehouse(s,warehouseId);
  const ids=new Set(s.tasks.filter(t=>t.date===date&&canReport(s,t.assignment,actor)&&s.warehouses.some(x=>x.id===t.assignment.warehouse&&x.pid===w.pid)).map(t=>t.assignment.warehouse));
