@@ -8,7 +8,7 @@ import {coilMovements} from './concise-coils';
 const id=z.string().min(1).max(180), text=z.string().max(4000), date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(x=>new Date(x+'T12:00:00Z').toISOString().slice(0,10)===x,'Некорректная дата');
 const number=z.number().finite().min(0).max(1e9), qty=number;
 const crew=z.array(z.object({employee:id,ktu:number}).strict()).max(200);
-const item=z.object({material:id,sent:qty,received:qty.nullable(),weights:z.array(number.positive()).max(10000).optional(),coils:number.int().optional()}).strict();
+const item=z.object({material:id,sent:qty,received:qty.nullable(),weights:z.array(number.positive()).max(10000).optional(),coils:number.int().optional(),receiptMasses:z.array(z.object({kg:number.positive(),sourceIndex:number.int().optional()}).strict()).min(1).max(10000).optional()}).strict();
 const assignment=z.object({id,warehouse:id,material:z.string().max(180),work:z.enum(['dig','extract','wind','strip']),active:z.boolean()}).strict();
 const measurement=z.object({id,pid:id,material:id,date,gPerM:number.positive(),confirmed:z.literal(true),author:id}).strict();
 const schemas={
@@ -90,14 +90,14 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
     if(raw.kind==='transfer'){
      if(!old){
       const t=z.object({id,kind:z.literal('transfer'),date,from:id,to:id,actor:id,items:z.array(item).min(1).max(100),weights:z.array(number.positive()).max(10000),reason:text}).strict().parse(raw);
-      if(t.date!==s.today||t.items.some(i=>i.received!==null))fail('Новая отправка оформляется сегодня, без приёмки за получателя.');
+      if(t.date!==s.today||t.items.some(i=>i.received!==null||i.receiptMasses!==undefined))fail('Новая отправка оформляется сегодня, без приёмки за получателя.');
       s=M.transfer(s,{...t,actor});s.documents=s.documents.map(d=>d.id===t.id?{...t,actor:p.employee}:d);
      }else{
       if(old.kind!=='transfer'||raw.items.length!==old.items.length||!same(raw.items.map(i=>i.material),old.items.map(i=>i.material)))fail('Состав проведённой отправки менять нельзя.');
       const values=raw.items.map(i=>item.parse(i));text.parse(raw.reason);
       if(old.items.every(i=>i.received===null)){
-       if(!same(values.map(({received,...v})=>v),old.items.map(({received,...v})=>v))||values.some(i=>i.received===null))fail('Приёмка не меняет отправку.');
-       s=M.receive(s,old.id,values.map(i=>i.received!),actor,raw.reason);
+       if(!same(values.map(({received,receiptMasses,...v})=>v),old.items.map(({received,receiptMasses,...v})=>v))||values.some(i=>i.received===null))fail('Приёмка не меняет отправку.');
+       s=M.receive(s,old.id,values.map(i=>i.received!),actor,raw.reason,values.map(i=>i.receiptMasses));
        s.documents=s.documents.map(d=>d.id===old.id?{...(d as M.Transfer),receiver:p.employee}:d);
       }else{
        requireAdmin(p);if(raw.reason.trim().length<3)fail('Укажите причину исправления.');

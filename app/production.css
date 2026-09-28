@@ -97,6 +97,20 @@
 .c-cable-name{display:block}.c-cable-name>span{display:block;white-space:nowrap;line-height:1.5}
 @media(max-width:360px){.production.tg .c-app-content{padding:14px 10px 100px}.c-review.tg .c-balance{padding:10px}.c-review.tg .c-table.balance,.c-review.tg .c-table.balance .c-number-link{font-size:12px}.c-review.tg .c-table.balance th:first-child{font-size:11px;padding-left:5px}.production .c-domain-login{padding:9px}.production .c-domain-login b{font-size:16px}.production.tg .c-compact-header>div>b{font-size:15px}}
 /* Balance figures use the same four centered columns in TG and WEB. */
+.c-receipt{display:grid;gap:14px;margin-top:16px;min-width:0}
+.c-receipt-coils{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.c-receipt-coils button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:82px;padding:8px 3px;border:1px solid #afc6ca;border-radius:12px;background:#fff;color:#193942}
+.c-receipt-coils button[aria-pressed=true]{background:#087b77;border-color:#087b77;color:#fff}
+.c-receipt-coils button b{font-size:clamp(11px,3.3vw,16px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.c-receipt-coils button small,.c-receipt-coils button span{font-size:11px}
+.c-receipt-confirmed{display:grid;gap:12px;padding:14px;background:#eef7f5;border:1px solid #bfd9d5;border-radius:12px;min-width:0}
+.c-receipt-sum{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.c-receipt-sum button{min-height:44px;padding:6px 8px;border:1px solid #bfd9d5;border-radius:8px;background:white;color:#193942;overflow-wrap:anywhere}
+.c-receipt-sum button small{display:inline-block;font-size:11px}
+.c-receipt-manual{display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:8px}
+.c-receipt-manual label{display:grid;gap:6px;min-width:0}
+.c-receipt-manual select{min-height:44px;border:1px solid #afc6ca;border-radius:8px;background:#fff;padding:8px}
+.c-receipt button:focus-visible{outline:3px solid #dc970b;outline-offset:2px}
 .c-review:is(.tg,.web) .c-table.balance{table-layout:fixed;width:100%;min-width:0}
 .c-review:is(.tg,.web) .c-table.balance col.balance-name{width:28%}
 .c-review:is(.tg,.web) .c-table.balance col.balance-number{width:18%}

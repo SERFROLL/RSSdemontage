@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 const out='outputs/operational-test';mkdirSync(out,{recursive:true});
-for(const name of ['access-workflow','observer-access','observer-state','operational-bot','pid-summary','stats-filters','bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
+for(const name of ['receipt-mass','access-workflow','observer-access','observer-state','operational-bot','pid-summary','stats-filters','bot','domain','ledger','company-notifications','task-notifications','daily-work','concise-model','concise-coils','concise-balance','production-domain','production-store','production-auth','telegram-auth','settings-filters','pid-metadata']){
  const code=ts.transpileModule(readFileSync('lib/'+name+'.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replace(/from (['"])\.\/([a-z-]+)\1/g,'from "./$2.mjs"');writeFileSync(`${out}/${name}.mjs`,code);
 }
 writeFileSync(`${out}/store.mjs`,'export const runtime=()=>globalThis.OPERATIONAL_TEST_ENV; export const database=()=>runtime().DB; export const readDocs=()=>{throw Error("Not used")}; export const saveDoc=readDocs; export const hash=readDocs;');
@@ -38,6 +38,11 @@ let t={id:'trip1',kind:'transfer',date:today,from:'a101',to:'main',actor:'a',ite
 check('Нельзя отгрузить сверх остатка',()=>assert.throws(()=>D.applyChanges(s,[{key:'documents',rows:[{...t,items:[{material:'c',sent:5,received:null}],weights:[]}]}],a),/Недостаточно/));
 s=D.applyChanges(s,[{key:'documents',rows:[t]}],a);
 check('В пути сохраняется масса компании',()=>assert.equal(M.movements(s).reduce((a,m)=>a+m.qty,0),3.376));
+const R=await import(`../${out}/receipt-mass.mjs`);
+check('Приёмка: запятая, точка, кг и тонны дают точную сумму',()=>{assert.equal(R.parseReceiptMass('37,035','t'),37035);assert.equal(R.parseReceiptMass('37.035','t'),37035);assert.equal(R.receiptTonnes([{kg:800.5},{kg:799.5}]),1.6);for(const v of ['', '800 900','1e3','-1','0','NaN','1,2,3'])assert.throws(()=>R.parseReceiptMass(v,'kg'));});
+check('Приёмка: одинаковые катушки различаются индексом и сохраняются с ручной массой',()=>{const masses=[[{kg:800,sourceIndex:1},{kg:790}]];const next=M.receive(s,t.id,[1.59],'b','Разница взвешивания',masses);const saved=D.applyChanges(s,D.changes(s,next),b).documents.find(d=>d.id===t.id);assert.deepEqual(saved.items[0].receiptMasses,masses[0]);assert.equal(saved.items[0].received,1.59);assert.throws(()=>D.applyChanges(s,D.changes(s,next),a),/Приёмку/);});
+check('Приёмка: подмена массы, повторы и неверная сумма отвергаются сервером',()=>{for(const entries of [[{kg:800,sourceIndex:0},{kg:800,sourceIndex:0}],[{kg:799,sourceIndex:0}],[{kg:800,sourceIndex:2}],[]]){const raw={...t,items:[{...t.items[0],received:1.6,receiptMasses:entries}],reason:'Проверка'};assert.throws(()=>D.applyChanges(s,[{key:'documents',rows:[raw]}],b));}assert.throws(()=>M.receive(s,t.id,[1.6],'b','',[[{kg:790}]]),/сумм/);});
+check('Приёмка: старые отправки без масс и несколько материалов не смешиваются',()=>{assert.deepEqual(R.sentWeights({...t,items:[{...t.items[0],weights:undefined}]},{...t.items[0],weights:undefined}),[800,800]);assert.deepEqual(R.sentWeights({...t,items:[t.items[0],{material:'lead',sent:1,received:null}]},{material:'lead',sent:1,received:null}),[]);assert.equal(R.receiptTonnes([{kg:R.parseReceiptMass('37,035','t')}]),37.035);});
 let received=M.receive(s,t.id,[1.59],'b','Разница взвешивания');
 check('Отправитель не принимает за получателя',()=>assert.throws(()=>D.applyChanges(s,D.changes(s,received),a),/Приёмку/));
 s=D.applyChanges(s,D.changes(s,received),b);

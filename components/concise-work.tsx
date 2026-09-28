@@ -59,7 +59,7 @@ export function WorkPanel({s,actor,update,onTransfer,onDocument,onExclusion}:{s:
    {s.warehouses.some(w=>w.pid&&M.canManageWarehouse(s,w.id,actor))&&<button className="c-action-tile" onClick={onExclusion}><span>Добавить информацию о неизвлекаемом участке на ПИД</span><b aria-hidden="true">＋</b></button>}
    <button className="c-action-tile" onClick={()=>onTransfer()}><span>Добавить документ перемещения материала</span><b aria-hidden="true">＋</b></button>
   </section>}
-  {(incoming.length>0||outgoing.length>0)&&<section className="c-transfers"><h2>Перемещения</h2>{incoming.map(t=><button className="c-arrival" onClick={()=>onTransfer(t.id)} key={t.id}><span><b>Принять · {M.fmt(t.items.reduce((a,l)=>a+l.sent,0))} т</b><small>{M.warehouse(s,t.from)} → {M.warehouse(s,t.to)}</small></span><span>›</span></button>)}{outgoing.map(t=><button className="c-done-line" key={t.id} onClick={()=>onDocument(t.id)}><span>Ожидаю приёмку<small>{t.id} · {M.warehouse(s,t.to)}</small></span><b>{M.fmt(t.items.reduce((a,l)=>a+l.sent,0))} т ›</b></button>)}</section>}
+  {(incoming.length>0||outgoing.length>0)&&<section className="c-transfers"><h2>Перемещения которые необходимо рассмотреть</h2>{incoming.map(t=><button className="c-arrival" onClick={()=>onTransfer(t.id)} key={t.id}><span><b>Принять · {M.fmt(t.items.reduce((a,l)=>a+l.sent,0))} т</b><small>{M.warehouse(s,t.from)} → {M.warehouse(s,t.to)}</small></span><span>›</span></button>)}{outgoing.map(t=><button className="c-done-line" key={t.id} onClick={()=>onDocument(t.id)}><span>Ожидаю приёмку<small>{t.id} · {M.warehouse(s,t.to)}</small></span><b>{M.fmt(t.items.reduce((a,l)=>a+l.sent,0))} т ›</b></button>)}</section>}
  </>
 }
 
