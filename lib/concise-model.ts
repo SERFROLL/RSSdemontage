@@ -28,7 +28,7 @@ export type Crew = {employee:string;ktu:number};
 export type Revision = {version:number;qty:number;actor:string;at:string;reason:string;mode:'work'|'off'|'idle';measure?:Snapshot;metals?:number[];crew:Crew[];rate:number;norm:number[]};
 export type WorkDoc = {source?:'restored';id:string;kind:'work';taskId:string;date:string;assignment:AssignedWork;versions:Revision[]};
 export type TransferItem = {material:string;sent:number;received:number|null;weights?:number[];coils?:number;receiptMasses?:ReceiptMass[]};
-export type Transfer = {id:string;kind:'transfer';date:string;from:string;to:string;actor:string;items:TransferItem[];weights:number[];receivedAt?:string;receiver?:string;reason:string;history?:{at:string;actor:string;reason:string;items:TransferItem[]}[]};
+export type Transfer = {id:string;kind:'transfer';date:string;from:string;to:string;actor:string;items:TransferItem[];weights:number[];receivedAt?:string;receiver?:string;receiptReason?:string;reason:string;history?:{at:string;actor:string;reason:string;items:TransferItem[]}[]};
 export type Opening = {id:string;kind:'opening';date:string;warehouse:string;material:string;qty:number;actor:string};
 export type Adjustment = {id:string;kind:'adjustment';date:string;warehouse:string;material:string;qty:number;actor:string;reason:string;basis:string};
 export type Document = WorkDoc|Transfer|Opening|Adjustment|Exclusion;
@@ -149,7 +149,7 @@ export function receive(s:State,id:string,values:number[],actor:string,reason:st
  if(values.length!==t.items.length||values.some(q=>!Number.isFinite(q)||q<0))throw Error('Укажите измеренную массу каждой позиции.');
  if(receiptMasses){if(receiptMasses.length!==t.items.length)throw Error('Проверьте состав приёмки.');receiptMasses.forEach((entries,k)=>{if(entries!==undefined)validateReceipt(entries,sentWeights(t,t.items[k]),values[k]);});}
  if(values.some((q,i)=>Math.abs(q-t.items[i].sent)>.000001)&&reason.trim().length<3)throw Error('Поясните расхождение отправленной и принятой массы.');
- return {...s,documents:s.documents.map(d=>d.id!==id?d:{...t,receivedAt:s.today,receiver:actor,reason,items:t.items.map((i,k)=>({...i,received:values[k],...(receiptMasses?.[k]?{receiptMasses:receiptMasses[k]}:{})}))})};
+ return {...s,documents:s.documents.map(d=>d.id!==id?d:{...t,receivedAt:s.today,receiver:actor,receiptReason:reason,items:t.items.map((i,k)=>({...i,received:values[k],...(receiptMasses?.[k]?{receiptMasses:receiptMasses[k]}:{})}))})};
 }
 export function saveAssignment(s:State,a:Assignment):State{
  a=cleanAssignment(a);

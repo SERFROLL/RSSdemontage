@@ -27,7 +27,9 @@ const schemas={
 type Catalog=keyof typeof schemas;
 export type Principal={employee:string;admin:boolean;observer?:boolean};
 export type Patch={key:string;rows:unknown[]};
-const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
+// PostgreSQL JSONB does not preserve object key order. Arrays remain ordered.
+const canonical=(value:unknown):unknown=>Array.isArray(value)?value.map(canonical):value!==null&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,v])=>[key,canonical(v)])):value;
+const same=(a:unknown,b:unknown)=>JSON.stringify(canonical(a))===JSON.stringify(canonical(b));
 const keyFor=(key:string,row:Record<string,unknown>)=>key==='replacements'?`${row.warehouse}|${row.deputy}`:key==='standards'?`${row.material}|${row.date}`:String(row.id);
 export function changes(before:M.State,after:M.State):Patch[]{const keys=[...new Set([...Object.keys(before),...(after.summarySubscriptions?['summarySubscriptions']:[])])];return keys.filter(k=>!same(before[k as keyof M.State],after[k as keyof M.State])).map(key=>{
  const a=before[key as keyof M.State]??(key==='summarySubscriptions'?[]:undefined),b=after[key as keyof M.State];
@@ -96,8 +98,9 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
       if(old.kind!=='transfer'||raw.items.length!==old.items.length||!same(raw.items.map(i=>i.material),old.items.map(i=>i.material)))fail('Состав проведённой отправки менять нельзя.');
       const values=raw.items.map(i=>item.parse(i));text.parse(raw.reason);
       if(old.items.every(i=>i.received===null)){
-       if(!same(values.map(({received,receiptMasses,...v})=>v),old.items.map(({received,receiptMasses,...v})=>v))||values.some(i=>i.received===null))fail('Приёмка не меняет отправку.');
-       s=M.receive(s,old.id,values.map(i=>i.received!),actor,raw.reason,values.map(i=>i.receiptMasses));
+       if(!same(values.map(({received,receiptMasses,...v})=>v),old.items.map(({received,receiptMasses,...v})=>v))||values.some(i=>i.received===null))fail('Приёмка не сохранена: данные отправки отличаются от документа на сервере. Обновите документ и повторите приёмку. Если ошибка повторится, сообщите администратору номер перемещения.');
+       const receiptReason=text.parse(raw.receiptReason??raw.reason);
+       s=M.receive(s,old.id,values.map(i=>i.received!),actor,receiptReason,values.map(i=>i.receiptMasses));
        s.documents=s.documents.map(d=>d.id===old.id?{...(d as M.Transfer),receiver:p.employee}:d);
       }else{
        requireAdmin(p);if(raw.reason.trim().length<3)fail('Укажите причину исправления.');
