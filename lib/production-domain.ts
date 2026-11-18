@@ -97,7 +97,14 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
      }else{
       if(old.kind!=='transfer'||raw.items.length!==old.items.length||!same(raw.items.map(i=>i.material),old.items.map(i=>i.material)))fail('Состав проведённой отправки менять нельзя.');
       const values=raw.items.map(i=>item.parse(i));text.parse(raw.reason);
-      if(old.items.every(i=>i.received===null)){
+      const revision=raw.history?.at(-1);
+      if(old.items.some(i=>i.received!==null)&&(revision?.action==='correctReceipt'||revision?.action==='cancelReceipt')){
+       if((raw.history||[]).length!==(old.history?.length||0)+1||!same((raw.history||[]).slice(0,-1),old.history||[])||!same(revision.items,old.items)||revision.receivedAt!==old.receivedAt)fail('Документ уже изменён. Откройте его заново.');
+       if(!same(values.map(({received,...v})=>v),old.items.map(({received,...v})=>v)))fail('Сохраните исходные данные отправки.');
+       if(revision.action==='cancelReceipt'&&values.some(i=>i.received!==null)||revision.action==='correctReceipt'&&values.some(i=>i.received===null))fail('Проверьте состав приёмки.');
+       s=M.reviseReceipt(s,old.id,revision.action==='cancelReceipt'?null:values.map(i=>i.received!),actor,text.parse(revision.reason));
+       s.documents=s.documents.map(d=>d.id===old.id?{...d,history:(d as M.Transfer).history!.map((h,k)=>k===(d as M.Transfer).history!.length-1?{...h,actor:p.employee}:h)}:d);
+      }else if(old.items.every(i=>i.received===null)){
        if(!same(values.map(({received,receiptMasses,...v})=>v),old.items.map(({received,receiptMasses,...v})=>v))||values.some(i=>i.received===null))fail('Приёмка не сохранена: данные отправки отличаются от документа на сервере. Обновите документ и повторите приёмку. Если ошибка повторится, сообщите администратору номер перемещения.');
        const receiptReason=text.parse(raw.receiptReason??raw.reason);
        s=M.receive(s,old.id,values.map(i=>i.received!),actor,receiptReason,values.map(i=>i.receiptMasses));
@@ -158,3 +165,4 @@ export function postings(s:M.State){
  const rows:{document:string;date:string;warehouse:string;material:string;unit:string;quantity:number;basis:string}[]=M.movements(s).filter(m=>m.qty!==0).map(m=>({document:m.docId,date:m.date,warehouse:m.warehouse,material:m.material,unit:'g',quantity:Math.round(m.qty*1e6),basis:m.basis}));
  return rows.concat(coilMovements(s).filter(m=>m.qty!==0).map(m=>({document:m.docId,date:m.date,warehouse:m.warehouse,material:m.material,unit:'coil',quantity:m.qty,basis:'auxiliary'})));
 }
+

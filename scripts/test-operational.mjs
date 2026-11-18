@@ -322,3 +322,24 @@ if(process.env.TEST_DATABASE_URL){
  }finally{await pool.end();await root.query('DROP SCHEMA operational_test CASCADE');await root.end();}
 }
 console.log(`Operational checks passed: ${checks}`);
+
+check('Корректировка и отмена приёмки: права, история, повтор и расход',()=>{
+ const initial={...structuredClone(legacyFixture),documents:[{id:'stock',kind:'opening',date:today,warehouse:'a101',material:'c',qty:10,actor:'a'}]};
+ const sent=M.transfer(initial,{id:'receipt-test',kind:'transfer',date:today,from:'a101',to:'main',actor:'a',items:[{material:'c',sent:5,received:null}],weights:[],reason:''});
+ const received=M.receive(sent,'receipt-test',[5],'b','');
+ const corrected=M.reviseReceipt(received,'receipt-test',[4],'b','Проверка веса');
+ const result=D.applyChanges(received,D.changes(received,corrected),b);
+ assert.equal(M.stock(result,'main','c'),4);
+ assert.equal(result.documents.at(-1).history.at(-1).actor,'b');
+ assert.equal(result.documents.at(-1).history.at(-1).items[0].received,5);
+ assert.throws(()=>D.applyChanges(received,D.changes(received,corrected),a),/доступно/);
+ assert.throws(()=>D.applyChanges(result,D.changes(received,corrected),b),/уже изменён/);
+ const cancelled=D.applyChanges(result,D.changes(result,M.reviseReceipt(result,'receipt-test',null,'b','Ошибка приёмки')),b);
+ assert.equal(M.stock(cancelled,'main','c'),0);
+ assert.equal(cancelled.documents.at(-1).receivedAt,undefined);
+ assert.equal(cancelled.documents.at(-1).items[0].sent,5);
+ assert.equal(M.stock(D.applyChanges(cancelled,D.changes(cancelled,M.receive(cancelled,'receipt-test',[5],'b','')),b),'main','c'),5);
+ const spent=M.transfer(received,{id:'out',kind:'transfer',date:today,from:'main',to:'master',actor:'b',items:[{material:'c',sent:3,received:null}],weights:[],reason:''});
+ assert.throws(()=>M.reviseReceipt(spent,'receipt-test',null,'b','Отмена'),/Недостаточно/);
+ assert.throws(()=>M.reviseReceipt(spent,'receipt-test',[2],'b','Уточнение'),/Недостаточно/);
+});
