@@ -28,7 +28,7 @@ export type Crew = {employee:string;ktu:number};
 export type Revision = {version:number;qty:number;actor:string;at:string;reason:string;mode:'work'|'off'|'idle';measure?:Snapshot;metals?:number[];crew:Crew[];rate:number;norm:number[]};
 export type WorkDoc = {source?:'restored';id:string;kind:'work';taskId:string;date:string;assignment:AssignedWork;versions:Revision[]};
 export type TransferItem = {material:string;sent:number;received:number|null;weights?:number[];coils?:number;receiptMasses?:ReceiptMass[]};
-export type Transfer = {id:string;kind:'transfer';date:string;from:string;to:string;actor:string;items:TransferItem[];weights:number[];receivedAt?:string;receiver?:string;receiptReason?:string;reason:string;history?:{at:string;actor:string;reason:string;items:TransferItem[];receivedAt?:string;receiver?:string;receiptReason?:string;action?:'correctReceipt'|'cancelReceipt'}[]};
+export type Transfer = {id:string;kind:'transfer';date:string;from:string;to:string;actor:string;items:TransferItem[];weights:number[];receivedAt?:string;receiver?:string;receiptReason?:string;reason:string;cancelled?:boolean;history?:{at:string;actor:string;reason:string;items:TransferItem[];receivedAt?:string;receiver?:string;receiptReason?:string;from?:string;to?:string;action?:'correctReceipt'|'cancelReceipt'|'redirectTransfer'|'cancelTransfer'}[]};
 export type Opening = {id:string;kind:'opening';date:string;warehouse:string;material:string;qty:number;actor:string};
 export type Adjustment = {id:string;kind:'adjustment';date:string;warehouse:string;material:string;qty:number;actor:string;reason:string;basis:string};
 export type Document = WorkDoc|Transfer|Opening|Adjustment|Exclusion;
@@ -128,7 +128,7 @@ export function saveDay(s:State,entries:Entry[],actor:string):State{
 export type Move={date:string;warehouse:string;material:string;qty:number;docId:string;label:string;basis:'calculated'|'weighed'|'opening'|'adjustment'};
 export function movements(s:State):Move[]{const out:Move[]=[];const add=(date:string,w:string,m:string,q:number,id:string,label:string,basis:Move['basis'])=>out.push({date,warehouse:w,material:m,qty:round(q),docId:id,label,basis});
  for(const d of s.documents){
-  if(d.kind==='exclusion')continue;
+  if(d.kind==='exclusion'||d.kind==='transfer'&&d.cancelled)continue;
   if(d.kind==='opening'||d.kind==='adjustment'){add(d.date,d.warehouse,d.material,d.qty,d.id,d.kind==='opening'?'Начальный остаток':'Уточнение массы',d.kind);continue;}
   if(d.kind==='work'){const v=current(d),a=d.assignment;if(v.mode!=='work')continue;if(a.work==='extract'&&v.measure)add(d.date,a.warehouse,a.material,v.qty*v.measure.kgPerM/1000,d.id,'Извлечено · расчётная масса','calculated');if(a.work==='strip'){add(d.date,a.warehouse,a.material,-v.qty,d.id,'Разделано кабеля','weighed');['copper','lead','aluminium'].forEach((m,i)=>add(d.date,a.warehouse,m,v.metals?.[i]||0,d.id,'Получено при разделке','weighed'));}continue;}
   for(const item of d.items){add(d.date,d.from,item.material,-item.sent,d.id,'Отправлено','weighed');add(d.date,'transit',item.material,item.sent,d.id,'В пути','weighed');if(item.received!==null){add(d.receivedAt||d.date,'transit',item.material,-item.received,d.id,'Принято / разница','weighed');add(d.receivedAt||d.date,d.to,item.material,item.received,d.id,'Принято','weighed');}}
@@ -149,7 +149,7 @@ export function transfer(s:State,t:Transfer):State{
 }
 export function receive(s:State,id:string,values:number[],actor:string,reason:string,receiptMasses?:(ReceiptMass[]|undefined)[]):State{
  if(actor!=='admin'&&!s.employees.some(p=>p.id===actor&&p.active))throw Error('Сотрудник не работает.');
- const t=s.documents.find((d):d is Transfer=>d.id===id&&d.kind==='transfer');if(!t||t.items.some(i=>i.received!==null))throw Error('Поставка уже принята или недоступна.');
+ const t=s.documents.find((d):d is Transfer=>d.id===id&&d.kind==='transfer');if(!t||t.cancelled||t.items.some(i=>i.received!==null))throw Error('Поставка уже принята или недоступна.');
  if(!canManageWarehouse(s,t.to,actor))throw Error('Приёмку подтверждает МОЛ или доверенное лицо.');
  if(values.length!==t.items.length||values.some(q=>!Number.isFinite(q)||q<0))throw Error('Укажите измеренную массу каждой позиции.');
  if(receiptMasses){if(receiptMasses.length!==t.items.length)throw Error('Проверьте состав приёмки.');receiptMasses.forEach((entries,k)=>{if(entries!==undefined)validateReceipt(entries,sentWeights(t,t.items[k]),values[k]);});}
@@ -158,13 +158,26 @@ export function receive(s:State,id:string,values:number[],actor:string,reason:st
 }
 export function reviseReceipt(s:State,id:string,values:number[]|null,actor:string,reason:string):State{
  const doc=s.documents.find((d):d is Transfer=>d.id===id&&d.kind==='transfer');
- if(!doc||doc.items.some(i=>i.received===null))throw Error('Приёмка уже отменена или ещё не подтверждена.');
+ if(!doc||doc.cancelled||doc.items.some(i=>i.received===null))throw Error('Приёмка уже отменена или ещё не подтверждена.');
  if(!canManageWarehouse(s,doc.to,actor))throw Error('Исправление приёмки доступно МОЛ склада, доверенному лицу или администратору.');
  if(reason.trim().length<3)throw Error('Укажите причину исправления или отмены.');
  if(values&&(values.length!==doc.items.length||values.some(v=>!Number.isFinite(v)||v<0)))throw Error('Укажите принятую массу каждой позиции.');
  const revised:Transfer={...doc,items:doc.items.map((item,k)=>({...item,received:values?values[k]:null})),
  receivedAt:values?doc.receivedAt:undefined,receiver:values?doc.receiver:undefined,receiptReason:values?doc.receiptReason:undefined,
  history:[...(doc.history||[]),{at:new Date().toISOString(),actor,reason:reason.trim(),action:values?'correctReceipt':'cancelReceipt',items:doc.items,receivedAt:doc.receivedAt,receiver:doc.receiver,receiptReason:doc.receiptReason}]};
+ const next={...s,documents:s.documents.map(d=>d.id===id?revised:d)};
+ assertStock(next);
+ return next;
+}
+export function reviseTransfer(s:State,id:string,to:string|null,actor:string,reason:string):State{
+ const doc=s.documents.find((d):d is Transfer=>d.id===id&&d.kind==='transfer');
+ if(!doc||doc.cancelled)throw Error('Перемещение уже отменено или не найдено.');
+ if(!canManageWarehouse(s,doc.from,actor))throw Error('Исправление отправки доступно администратору, МОЛ отправителя и доверенному лицу.');
+ if(reason.trim().length<3)throw Error('Укажите причину исправления.');
+ if(to!==null&&(to===doc.from||to===doc.to||!s.warehouses.some(w=>w.id===to)))throw Error('Выберите другой склад получателя.');
+ const revised:Transfer={...doc,to:to??doc.to,cancelled:to===null,
+  items:doc.items.map(({receiptMasses,...item})=>({...item,received:null})),receivedAt:undefined,receiver:undefined,receiptReason:undefined,
+  history:[...(doc.history||[]),{at:new Date().toISOString(),actor,reason:reason.trim(),action:to===null?'cancelTransfer':'redirectTransfer',from:doc.from,to:doc.to,items:doc.items,receivedAt:doc.receivedAt,receiver:doc.receiver,receiptReason:doc.receiptReason}]};
  const next={...s,documents:s.documents.map(d=>d.id===id?revised:d)};
  assertStock(next);
  return next;

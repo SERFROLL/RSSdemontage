@@ -343,3 +343,32 @@ check('Корректировка и отмена приёмки: права, и
  assert.throws(()=>M.reviseReceipt(spent,'receipt-test',null,'b','Отмена'),/Недостаточно/);
  assert.throws(()=>M.reviseReceipt(spent,'receipt-test',[2],'b','Уточнение'),/Недостаточно/);
 });
+
+check('Смена получателя и полная отмена: остатки, история, права, повтор',()=>{
+ const initial={...structuredClone(legacyFixture),documents:[{id:'initial',kind:'opening',date:today,warehouse:'a101',material:'c',qty:10,actor:'a'}]};
+ const sent=M.transfer(initial,{id:'redirect-test',kind:'transfer',date:today,from:'a101',to:'main',actor:'a',items:[{material:'c',sent:5,received:null,coils:4}],weights:[],reason:''});
+ const received=M.receive(sent,'redirect-test',[5],'b','');
+ const proposal=M.reviseTransfer(received,'redirect-test','master','a','Неверный получатель');
+ const patch=D.changes(received,proposal);
+ assert.throws(()=>D.applyChanges(received,patch,b),/доступно/);
+ const redirected=D.applyChanges(received,patch,helper);
+ assert.equal(M.stock(redirected,'main','c'),0);
+ assert.equal(M.stock(redirected,'a101','c'),5);
+ assert.equal(M.stock(redirected,'master','c'),0);
+ assert.equal(redirected.documents.at(-1).history.at(-1).to,'main');
+ assert.equal(redirected.documents.at(-1).history.at(-1).actor,'helper');
+ assert.throws(()=>D.applyChanges(redirected,patch,helper),/уже изменён/);
+ const again=D.applyChanges(redirected,D.changes(redirected,M.receive(redirected,'redirect-test',[5],'b','')),b);
+ assert.equal(M.stock(again,'master','c'),5);
+ const cancelled=D.applyChanges(again,D.changes(again,M.reviseTransfer(again,'redirect-test',null,'a','Ошибочная отправка')),a);
+ assert.equal(M.stock(cancelled,'a101','c'),10);
+ assert.equal(M.stock(cancelled,'master','c'),0);
+ assert.equal(M.movements(cancelled).filter(m=>m.docId==='redirect-test').length,0);
+ assert.throws(()=>M.receive(cancelled,'redirect-test',[5],'b',''),/недоступна/);
+ assert.throws(()=>M.reviseTransfer(cancelled,'redirect-test','main','a','Повтор'),/отменено/);
+ const spent=M.transfer(received,{id:'spent',kind:'transfer',date:today,from:'main',to:'master',actor:'b',items:[{material:'c',sent:3,received:null}],weights:[],reason:''});
+ assert.throws(()=>M.reviseTransfer(spent,'redirect-test',null,'a','Отмена'),/Недостаточно/);
+ assert.throws(()=>M.reviseTransfer(spent,'redirect-test','master','a','Исправление'),/Недостаточно/);
+ const unreceived=D.applyChanges(sent,D.changes(sent,M.reviseTransfer(sent,'redirect-test',null,'a','Не отправляли')),a);
+ assert.equal(M.stock(unreceived,'a101','c'),10);
+});

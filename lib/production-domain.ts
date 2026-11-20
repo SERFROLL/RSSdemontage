@@ -97,7 +97,15 @@ export function applyChanges(state:M.State,input:unknown,p:Principal):M.State{
      }else{
       if(old.kind!=='transfer'||raw.items.length!==old.items.length||!same(raw.items.map(i=>i.material),old.items.map(i=>i.material)))fail('Состав проведённой отправки менять нельзя.');
       const values=raw.items.map(i=>item.parse(i));text.parse(raw.reason);
+      if(old.cancelled)fail('Перемещение отменено.');
       const revision=raw.history?.at(-1);
+      if(values.every(i=>i.received===null)&&(revision?.action==='redirectTransfer'||revision?.action==='cancelTransfer')){
+       if((raw.history||[]).length!==(old.history?.length||0)+1||!same((raw.history||[]).slice(0,-1),old.history||[])||!same(revision.items,old.items)||revision.to!==old.to||revision.from!==old.from||revision.receivedAt!==old.receivedAt)fail('Документ уже изменён. Откройте его заново.');
+       s=M.reviseTransfer(s,old.id,revision.action==='cancelTransfer'?null:id.parse(raw.to),actor,text.parse(revision.reason));
+       s.documents=s.documents.map(d=>d.id===old.id?{...d,history:(d as M.Transfer).history!.map((h,k)=>k===(d as M.Transfer).history!.length-1?{...h,actor:p.employee}:h)}:d);
+       continue;
+      }
+      if(raw.to!==old.to||raw.from!==old.from||raw.cancelled!==old.cancelled)fail('Используйте исправление отправки для смены склада или отмены.');
       if(old.items.some(i=>i.received!==null)&&(revision?.action==='correctReceipt'||revision?.action==='cancelReceipt')){
        if((raw.history||[]).length!==(old.history?.length||0)+1||!same((raw.history||[]).slice(0,-1),old.history||[])||!same(revision.items,old.items)||revision.receivedAt!==old.receivedAt)fail('Документ уже изменён. Откройте его заново.');
        if(!same(values.map(({received,...v})=>v),old.items.map(({received,...v})=>v)))fail('Сохраните исходные данные отправки.');

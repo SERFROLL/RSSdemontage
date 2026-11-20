@@ -45,8 +45,8 @@ export function WorkPanel({s,actor,update,onTransfer,onDocument,onExclusion}:{s:
  const open=tasks.filter(t=>!M.taskDoc(s,t.id));
  const dates=[...new Set((tab==='todo'?open:tasks.filter(t=>M.taskDoc(s,t.id))).map(t=>t.date))].sort().reverse();
  const shown=all?dates:dates.slice(0,3),done=tasks.filter(t=>t.date===s.today&&M.taskDoc(s,t.id)).length,expectedToday=tasks.filter(t=>t.date===s.today).length;
- const incoming=s.documents.filter((d):d is M.Transfer=>d.kind==='transfer'&&d.items.every(i=>i.received===null)&&M.canManageWarehouse(s,d.to,actor));
- const outgoing=s.documents.filter((d):d is M.Transfer=>d.kind==='transfer'&&d.items.every(i=>i.received===null)&&M.canManageWarehouse(s,d.from,actor));
+ const incoming=s.documents.filter((d):d is M.Transfer=>d.kind==='transfer'&&!d.cancelled&&d.items.every(i=>i.received===null)&&M.canManageWarehouse(s,d.to,actor));
+ const outgoing=s.documents.filter((d):d is M.Transfer=>d.kind==='transfer'&&!d.cancelled&&d.items.every(i=>i.received===null)&&M.canManageWarehouse(s,d.from,actor));
  const canSend=s.warehouses.some(w=>M.canManageWarehouse(s,w.id,actor));
  return <>
   <div className="c-heading"><div><h1>Моя работа</h1><p>{M.dateLabel(s.today)} · за сегодня {done} из {expectedToday} показателей заполнено</p></div></div>
